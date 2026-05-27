@@ -1,0 +1,9 @@
+{
+  "name": "出張健診 検査項目入力",
+  "short_name": "出張健診入力",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f6f7f3",
+  "theme_color": "#176c6a",
+  "icons": []
+}

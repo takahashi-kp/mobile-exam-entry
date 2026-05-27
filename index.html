@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#176c6a">
+  <title>出張健診 検査項目入力</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="stylesheet" href="./styles.css?v=20260527-23">
+</head>
+<body>
+  <div class="top-stack">
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">出張健診</p>
+        <h1>検査項目入力</h1>
+      </div>
+      <div class="header-controls">
+        <div class="segmented" role="tablist" aria-label="表示切替">
+          <button class="is-active" data-view="entry" type="button">入力</button>
+          <button data-view="records" type="button">一覧</button>
+          <button data-view="questionnaire" type="button">問診</button>
+          <button data-view="schedules" type="button">予定管理</button>
+          <button data-view="sync" type="button">同期</button>
+        </div>
+        <div class="actions">
+          <button class="ghost" id="exportCsv" type="button">CSV</button>
+          <button class="ghost" id="newRecord" type="button">新規</button>
+          <button class="primary" id="saveRecord" type="button">保存</button>
+        </div>
+      </div>
+      <div class="status-pill" id="connectionStatus">確認中</div>
+    </header>
+    <div class="patient-sticky">
+      <div class="form-grid id-row">
+        <label class="short-field reception-field">
+          <span>受付番号</span>
+          <input class="reception-input" name="受付番号" form="examForm" inputmode="numeric" maxlength="5">
+        </label>
+        <label class="short-field personal-field">
+          <span>個人番号</span>
+          <input class="personal-input" name="個人番号" form="examForm" inputmode="numeric" maxlength="11">
+        </label>
+        <label class="short-field walkin-name-field">
+          <span>氏名</span>
+          <input class="walkin-name-input" name="氏名" form="examForm">
+        </label>
+        <label class="short-field walkin-kana-field">
+          <span>カナ氏名</span>
+          <input class="walkin-kana-input" name="カナ氏名" form="examForm">
+        </label>
+        <label class="short-field walkin-birth-field">
+          <span>生年月日</span>
+          <input class="walkin-birth-input" name="生年月日" form="examForm" placeholder="YYYY/MM/DD">
+        </label>
+        <div class="patient-summary" id="patientSummary">予定未選択</div>
+        <div class="active-group-label" id="activeGroupLabel">予定グループ未選択</div>
+      </div>
+    </div>
+  </div>
+
+  <main class="shell">
+    <section class="workspace">
+      <section class="view is-visible" id="entryView">
+        <form id="examForm" autocomplete="off">
+          <div class="group-toggle-bar">
+            <button class="ghost" id="openAllGroups" type="button">すべて開く</button>
+            <button class="ghost" id="closeAllGroups" type="button">すべて閉じる</button>
+          </div>
+
+          <div class="section-block compact" data-group="便区分">
+            <h2>便区分</h2>
+            <div class="choice-line stool-choice-line">
+              <label class="choice"><input type="checkbox" name="便区分" value="1回" data-exclusive>1回</label>
+              <label class="choice"><input type="checkbox" name="便区分" value="2回" data-exclusive>2回</label>
+            </div>
+            <label class="group-note">
+              <span>自由入力</span>
+              <input name="便区分_自由入力" maxlength="15" placeholder="備考">
+            </label>
+          </div>
+
+          <div class="section-block" data-group="視力">
+            <h2>視力</h2>
+            <div class="form-grid vision-grid">
+              <label>
+                <span>右 裸眼</span>
+                <input class="vision-input" name="視力右裸眼" list="visionOptions" inputmode="decimal">
+              </label>
+              <label>
+                <span>右 矯正</span>
+                <input class="vision-input" name="視力右矯正" list="visionOptions" inputmode="decimal">
+              </label>
+              <label>
+                <span>左 裸眼</span>
+                <input class="vision-input" name="視力左裸眼" list="visionOptions" inputmode="decimal">
+              </label>
+              <label>
+                <span>左 矯正</span>
+                <input class="vision-input" name="視力左矯正" list="visionOptions" inputmode="decimal">
+              </label>
+            </div>
+            <label class="group-note">
+              <span>自由入力</span>
+              <input name="視力_自由入力" maxlength="15" placeholder="備考">
+            </label>
+            <datalist id="visionOptions">
+              <option value="0.0"></option>
+              <option value="0.1"></option>
+              <option value="0.2"></option>
+              <option value="0.3"></option>
+              <option value="0.4"></option>
+              <option value="0.5"></option>
+              <option value="0.6"></option>
+              <option value="0.7"></option>
+              <option value="0.8"></option>
+              <option value="0.9"></option>
+              <option value="1.0"></option>
+              <option value="1.2"></option>
+              <option value="1.5"></option>
+              <option value="2.0"></option>
+            </datalist>
+          </div>
+
+          <div class="section-block" data-group="X線">
+            <h2>X線</h2>
+            <div class="form-grid xray-grid">
+              <label>
+                <span>胸部X線フィルム番号</span>
+                <input class="five-digit-input" name="胸部X線フィルム番号" inputmode="numeric" maxlength="5">
+              </label>
+              <label>
+                <span>胃部X線フィルム番号</span>
+                <input class="five-digit-input" name="胃部X線フィルム番号" inputmode="numeric" maxlength="5">
+              </label>
+            </div>
+            <label class="group-note">
+              <span>自由入力</span>
+              <input name="X線_自由入力" maxlength="15" placeholder="備考">
+            </label>
+          </div>
+
+          <div class="section-block" data-group="食後">
+            <h2>食後時間</h2>
+            <div class="form-grid fasting-grid">
+              <label>
+                <span>空腹時間（時）</span>
+                <input class="two-char-input" name="空腹時間（時）" id="fastingHours" inputmode="decimal" placeholder="時">
+              </label>
+              <label>
+                <span>空腹時間（分）</span>
+                <input class="two-char-input" name="空腹時間（分）" inputmode="numeric" maxlength="2" placeholder="分">
+              </label>
+            </div>
+            <label class="group-note">
+              <span>自由入力</span>
+              <input name="食後時間_自由入力" maxlength="15" placeholder="備考">
+            </label>
+          </div>
+
+          <div class="section-block" data-group="尿">
+            <h2>尿検査</h2>
+            <div class="urine-grid" id="urineGrid"></div>
+            <label class="group-note">
+              <span>自由入力</span>
+              <input name="尿検査_自由入力" maxlength="15" placeholder="備考">
+            </label>
+          </div>
+
+          <div class="section-block" data-group="血圧">
+            <h2>血圧</h2>
+            <div class="form-grid bp-grid">
+              <label>
+                <span>1回目 最高血圧</span>
+                <input class="three-digit-input" name="1回目最高血圧" inputmode="numeric" maxlength="3">
+              </label>
+              <label>
+                <span>1回目 最低血圧</span>
+                <input class="three-digit-input" name="1回目最低血圧" inputmode="numeric" maxlength="3">
+              </label>
+              <div class="grid-break"></div>
+              <label>
+                <span>2回目 最高血圧</span>
+                <input class="three-digit-input" name="2回目最高血圧" inputmode="numeric" maxlength="3">
+              </label>
+              <label>
+                <span>2回目 最低血圧</span>
+                <input class="three-digit-input" name="2回目最低血圧" inputmode="numeric" maxlength="3">
+              </label>
+            </div>
+            <label class="group-note">
+              <span>自由入力</span>
+              <input name="血圧_自由入力" maxlength="15" placeholder="備考">
+            </label>
+          </div>
+
+          <div class="section-block" data-group="脈">
+            <h2>脈</h2>
+            <div class="form-grid one">
+              <label>
+                <span>脈拍</span>
+                <input class="three-digit-input" name="脈拍" inputmode="numeric" maxlength="3">
+              </label>
+            </div>
+            <label class="group-note">
+              <span>自由入力</span>
+              <input name="脈_自由入力" maxlength="15" placeholder="備考">
+            </label>
+          </div>
+
+          <div class="section-block" data-group="身体">
+            <h2>身体計測</h2>
+            <div class="form-grid measure-grid">
+              <label>
+                <span>身長</span>
+                <input class="measure-input" name="身長" inputmode="decimal">
+              </label>
+              <label>
+                <span>体重</span>
+                <input class="measure-input" name="体重" inputmode="decimal">
+              </label>
+              <label>
+                <span>腹囲</span>
+                <input class="measure-input" name="腹囲" inputmode="decimal">
+              </label>
+            </div>
+            <label class="group-note">
+              <span>自由入力</span>
+              <input name="身体計測_自由入力" maxlength="15" placeholder="備考">
+            </label>
+          </div>
+
+          <div class="section-block" data-group="聴力">
+            <h2>聴力</h2>
+            <div class="hearing-grid">
+              <div class="choice-line">
+                <span class="field-title">聴力(右)1000Hz</span>
+                <label class="choice"><input type="checkbox" name="聴力(右)1000Hz" value="所見なし" data-exclusive>所見なし</label>
+                <label class="choice"><input type="checkbox" name="聴力(右)1000Hz" value="所見あり" data-exclusive>所見あり</label>
+              </div>
+              <div class="choice-line">
+                <span class="field-title">聴力(左)1000Hz</span>
+                <label class="choice"><input type="checkbox" name="聴力(左)1000Hz" value="所見なし" data-exclusive>所見なし</label>
+                <label class="choice"><input type="checkbox" name="聴力(左)1000Hz" value="所見あり" data-exclusive>所見あり</label>
+              </div>
+              <div class="choice-line">
+                <span class="field-title">聴力(右)4000Hz</span>
+                <label class="choice"><input type="checkbox" name="聴力(右)4000Hz" value="所見なし" data-exclusive>所見なし</label>
+                <label class="choice"><input type="checkbox" name="聴力(右)4000Hz" value="所見あり" data-exclusive>所見あり</label>
+              </div>
+              <div class="choice-line">
+                <span class="field-title">聴力(左)4000Hz</span>
+                <label class="choice"><input type="checkbox" name="聴力(左)4000Hz" value="所見なし" data-exclusive>所見なし</label>
+                <label class="choice"><input type="checkbox" name="聴力(左)4000Hz" value="所見あり" data-exclusive>所見あり</label>
+              </div>
+            </div>
+            <label class="group-note">
+              <span>自由入力</span>
+              <input name="聴力_自由入力" maxlength="15" placeholder="備考">
+            </label>
+          </div>
+
+          <div class="section-block" data-group="診察">
+            <h2>巡回診察</h2>
+            <div class="choice-line diagnosis">
+              <span class="field-title">巡回診察</span>
+              <label class="choice"><input type="checkbox" name="巡回診察" value="異常所見あり" data-exclusive>異常所見あり</label>
+              <label class="choice"><input type="checkbox" name="巡回診察" value="所見なし" data-exclusive>所見なし</label>
+            </div>
+            <div class="finding-grid" id="findingGrid"></div>
+            <label class="group-note">
+              <span>自由入力</span>
+              <input name="巡回診察_自由入力" maxlength="15" placeholder="備考">
+            </label>
+          </div>
+
+          <div class="section-block">
+            <label>
+              <span>メモ</span>
+              <textarea name="メモ" rows="4"></textarea>
+            </label>
+          </div>
+        </form>
+      </section>
+
+      <section class="view" id="recordsView">
+        <div class="list-head">
+          <input id="searchRecords" placeholder="受付番号・個人番号・所見で検索">
+          <button class="ghost" id="syncNow" type="button">同期</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>受付番号</th>
+                <th>個人番号</th>
+                <th>氏名</th>
+                <th>便区分</th>
+                <th>視力</th>
+                <th>X線</th>
+                <th>食後</th>
+                <th>尿</th>
+                <th>血圧</th>
+                <th>脈</th>
+                <th>身体</th>
+                <th>聴力</th>
+                <th>診察</th>
+                <th>問診</th>
+                <th>同期</th>
+                <th>更新</th>
+              </tr>
+            </thead>
+            <tbody id="recordRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="view" id="questionnaireView">
+        <div id="questionnaireForm" class="questionnaire-form">
+          <div class="questionnaire-head">
+            <div>
+              <h2>問診票・質問票</h2>
+              <p>受診者本人または会場スタッフが入力します。保存すると端末内に保持し、オンライン時にクラウド同期します。</p>
+            </div>
+            <button class="primary" id="saveQuestionnaire" type="button">問診保存</button>
+          </div>
+          <div id="questionnaireRoot" class="questionnaire-root"></div>
+        </div>
+      </section>
+
+      <section class="view" id="schedulesView">
+        <div class="schedule-import">
+          <label>
+            <span>受診予定CSV</span>
+            <input id="scheduleCsv" type="file" accept=".csv,text/csv">
+          </label>
+        </div>
+        <div class="table-wrap">
+          <table class="schedule-table">
+            <thead>
+              <tr>
+                <th>グループ名</th>
+                <th>ファイル名</th>
+                <th>レコード数</th>
+                <th>登録日時</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="scheduleRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="view" id="syncView">
+        <div class="sync-panel">
+          <label>
+            <span>クラウド同期API URL</span>
+            <input id="cloudUrl" placeholder="https://example.com/api/exam-records">
+          </label>
+          <label>
+            <span>APIキー</span>
+            <input id="cloudKey" type="password" placeholder="任意">
+          </label>
+          <div class="sync-actions">
+            <button class="primary" id="saveSettings" type="button">設定保存</button>
+            <button class="ghost" id="pullCloud" type="button">クラウド読込</button>
+          </div>
+          <p class="sync-copy" id="syncMessage">オンライン時はローカル保存後にクラウドへ送信します。オフライン時は未同期として保持します。</p>
+          <div class="cleanup-panel">
+            <h2>端末内データ削除</h2>
+            <p id="cleanupSummary">同期状態を確認中です。</p>
+            <button class="ghost" id="deleteSyncedLocal" type="button">同期済データを端末から削除</button>
+          </div>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script src="./app.js?v=20260527-23" type="module"></script>
+</body>
+</html>
