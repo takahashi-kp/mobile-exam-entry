@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#176c6a">
   <title>出張健診 検査項目入力</title>
   <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="stylesheet" href="./styles.css?v=20260527-23">
+  <link rel="stylesheet" href="./styles.css?v=20260709-01">
 </head>
 <body>
   <div class="top-stack">
@@ -20,6 +20,7 @@
           <button class="is-active" data-view="entry" type="button">入力</button>
           <button data-view="records" type="button">一覧</button>
           <button data-view="questionnaire" type="button">問診</button>
+          <button data-view="guidance" type="button">保健指導</button>
           <button data-view="schedules" type="button">予定管理</button>
           <button data-view="sync" type="button">同期</button>
         </div>
@@ -351,6 +352,82 @@
         </div>
       </section>
 
+      <section class="view" id="guidanceView">
+        <div class="guidance-panel">
+          <div class="section-block guidance-form">
+            <h2>特定保健指導選別</h2>
+            <div class="guidance-grid">
+              <label>
+                <span>年度</span>
+                <input id="guidanceYear" inputmode="numeric" autocomplete="off" placeholder="2026">
+              </label>
+              <label>
+                <span>性別</span>
+                <select id="guidanceSex">
+                  <option value="男性">男性</option>
+                  <option value="女性">女性</option>
+                </select>
+              </label>
+              <label>
+                <span>協会・紙商・水産連合</span>
+                <select id="guidanceInsurance">
+                  <option value="はい">はい</option>
+                  <option value="いいえ">いいえ</option>
+                </select>
+              </label>
+              <label>
+                <span>生年月日</span>
+                <input id="guidanceBirthDate" autocomplete="off" placeholder="YYYY/MM/DD">
+              </label>
+              <label>
+                <span>HbA1c有無</span>
+                <select id="guidanceHba1c">
+                  <option value="あり">あり</option>
+                  <option value="なし">なし</option>
+                </select>
+              </label>
+              <label>
+                <span>食後時間</span>
+                <select id="guidanceMealTime">
+                  <option value="3.5時間超">3.5時間超</option>
+                  <option value="3.5時間以内">3.5時間以内</option>
+                </select>
+              </label>
+              <label>
+                <span>内服</span>
+                <select id="guidanceMedication">
+                  <option value="なし">なし</option>
+                  <option value="あり">あり</option>
+                </select>
+              </label>
+              <label>
+                <span>身長 cm</span>
+                <input id="guidanceHeight" inputmode="decimal" autocomplete="off" placeholder="170.0">
+              </label>
+              <label>
+                <span>体重 kg</span>
+                <input id="guidanceWeight" inputmode="decimal" autocomplete="off" placeholder="65.0">
+              </label>
+              <label>
+                <span>腹囲 cm</span>
+                <input id="guidanceWaist" inputmode="decimal" autocomplete="off" placeholder="85.0">
+              </label>
+            </div>
+            <div class="guidance-actions">
+              <button class="ghost" id="copyEntryToGuidance" type="button">入力画面から反映</button>
+              <button class="ghost" id="clearGuidance" type="button">クリア</button>
+            </div>
+          </div>
+          <div class="section-block guidance-result">
+            <span>判定</span>
+            <strong id="guidanceResult">--</strong>
+            <p id="guidanceSummary">条件を入力してください</p>
+            <div class="guidance-checks" id="guidanceChecks"></div>
+          </div>
+        </div>
+      </section>
+
+
       <section class="view" id="syncView">
         <div class="sync-panel">
           <label>
@@ -376,6 +453,6 @@
     </section>
   </main>
 
-  <script src="./app.js?v=20260527-23" type="module"></script>
+  <script src="./app.js?v=20260709-01" type="module"></script>
 </body>
 </html>
