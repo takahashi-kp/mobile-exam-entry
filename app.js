@@ -1,4 +1,5 @@
 const DB_NAME = "mobile-exam-entry";
+const DEFAULT_CLOUD_URL = "https://mobile-exam-entry-b6w9.onrender.com/api/exam-records";
 const STORE = "records";
 const SETTINGS = "settings";
 const SCHEDULE_GROUPS = "scheduleGroups";
@@ -1606,7 +1607,7 @@ async function saveSettings() {
 }
 
 async function loadSettings() {
-  document.querySelector("#cloudUrl").value = (await getOne(SETTINGS, "cloudUrl"))?.value || "";
+  document.querySelector("#cloudUrl").value = (await getOne(SETTINGS, "cloudUrl"))?.value || DEFAULT_CLOUD_URL;
   document.querySelector("#cloudKey").value = (await getOne(SETTINGS, "cloudKey"))?.value || "";
 }
 
@@ -1786,7 +1787,7 @@ function cloudHeaders(settings) {
 
 async function getCloudSettings() {
   return {
-    url: (await getOne(SETTINGS, "cloudUrl"))?.value || "",
+    url: (await getOne(SETTINGS, "cloudUrl"))?.value || DEFAULT_CLOUD_URL,
     key: (await getOne(SETTINGS, "cloudKey"))?.value || ""
   };
 }
