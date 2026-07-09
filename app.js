@@ -244,13 +244,14 @@ async function init() {
   setupCollapsibleGroups();
   bindUi();
   await loadSettings();
+  if (navigator.onLine) await pullCloud({ silent: true });
   await loadActiveGroup();
   await refreshScheduleRows();
   await refreshRows();
   updateOnlineStatus();
   window.addEventListener("online", () => {
     updateOnlineStatus();
-    syncPending();
+    syncPending().then(() => pullCloud({ silent: true })).catch(() => {});
   });
   window.addEventListener("offline", updateOnlineStatus);
   if ("serviceWorker" in navigator) {
@@ -471,6 +472,7 @@ function bindUi() {
   document.querySelector("#openAllGroups").addEventListener("click", () => setAllGroupsCollapsed(false));
   document.querySelector("#closeAllGroups").addEventListener("click", () => setAllGroupsCollapsed(true));
   document.querySelector("#scheduleCsv").addEventListener("change", importScheduleCsv);
+  document.querySelector("#pullSchedules")?.addEventListener("click", () => pullCloud({ schedulesOnly: true }));
   document.querySelector("#syncNow").addEventListener("click", syncPending);
   document.querySelector("#saveSettings").addEventListener("click", saveSettings);
   document.querySelector("#pullCloud").addEventListener("click", pullCloud);
@@ -1336,12 +1338,17 @@ async function importScheduleCsv(event) {
     const required = ["受診者コード", "氏名", "カナ氏名", "性別名称", "生年月日"];
     const missing = required.filter((name) => !header.includes(name));
     if (missing.length) throw new Error(`${missing.join("、")} がありません`);
+    const now = new Date().toISOString();
     const group = {
+      entityType: "schedule_group",
       id: crypto.randomUUID(),
       name: file.name.replace(/\.[^.]+$/, ""),
       fileName: file.name,
       recordCount: 0,
-      createdAt: new Date().toISOString()
+      createdAt: now,
+      updatedAt: now,
+      syncState: "pending",
+      lastSyncError: ""
     };
     let count = 0;
     for (const row of rows.slice(1)) {
@@ -1351,9 +1358,17 @@ async function importScheduleCsv(event) {
       });
       if (!patient["受診者コード"]) continue;
       await put(SCHEDULE_PATIENTS, {
+        entityType: "schedule_patient",
         ...patient,
         id: `${group.id}::${patient["受診者コード"]}`,
-        groupId: group.id
+        groupId: group.id,
+        scheduleGroupId: group.id,
+        scheduleGroupName: group.name,
+        patientCode: patient["受診者コード"],
+        createdAt: now,
+        updatedAt: now,
+        syncState: "pending",
+        lastSyncError: ""
       });
       count += 1;
     }
@@ -1362,6 +1377,7 @@ async function importScheduleCsv(event) {
     await setActiveGroup(group.id);
     await refreshScheduleRows();
     await refreshRows();
+    if (navigator.onLine) await syncPending();
     toast(`${group.name} を${count}件で登録しました`);
   } catch (error) {
     toast(`受診予定CSVの取込に失敗しました: ${error.message}`, true);
@@ -1608,7 +1624,16 @@ async function syncPending() {
   const pendingGroups = (await getAll(EXAM_GROUP_VALUES)).filter((item) => item.syncState !== "synced");
   const pendingProgress = (await getAll(PROGRESS_SUMMARIES)).filter((item) => item.syncState !== "synced");
   const pendingQuestionnaires = (await getAll(QUESTIONNAIRE_RESPONSES)).filter((item) => item.syncState !== "synced");
-  const pending = [...pendingRecords, ...pendingGroups, ...pendingProgress, ...pendingQuestionnaires];
+  const pendingScheduleGroups = (await getAll(SCHEDULE_GROUPS)).filter((item) => item.syncState !== "synced");
+  const pendingSchedulePatients = (await getAll(SCHEDULE_PATIENTS)).filter((item) => item.syncState !== "synced");
+  const pending = [
+    ...pendingRecords,
+    ...pendingGroups,
+    ...pendingProgress,
+    ...pendingQuestionnaires,
+    ...pendingScheduleGroups,
+    ...pendingSchedulePatients
+  ];
   for (const item of pending) {
     try {
       await sendToCloud(settings, toSyncEnvelope(item));
@@ -1623,7 +1648,9 @@ async function syncPending() {
     ...(await getAll(STORE)),
     ...(await getAll(EXAM_GROUP_VALUES)),
     ...(await getAll(PROGRESS_SUMMARIES)),
-    ...(await getAll(QUESTIONNAIRE_RESPONSES))
+    ...(await getAll(QUESTIONNAIRE_RESPONSES)),
+    ...(await getAll(SCHEDULE_GROUPS)),
+    ...(await getAll(SCHEDULE_PATIENTS))
   ].filter((item) => item.syncState === "error").length;
   syncMessage.textContent = failed ? `${failed}件の同期に失敗しました。URLとAPIキーを確認してください。` : "同期が完了しました。";
 }
@@ -1677,23 +1704,30 @@ async function deleteSyncedLocalData() {
 }
 
 function toSyncEnvelope(item) {
-  if (item.entityType === "questionnaire_response") return item;
+  if (item.entityType) return item;
+  if (item.fileName && Object.prototype.hasOwnProperty.call(item, "recordCount")) return { entityType: "schedule_group", ...item };
+  if (item.groupId && item["受診者コード"]) return { entityType: "schedule_patient", ...item };
   if (item.groupKey) return { entityType: "exam_group_value", ...item };
   if (item.progress) return { entityType: "progress_summary", ...item };
   return { entityType: "record_header", ...item };
 }
 
 function getSyncStoreName(item) {
-  if (item.entityType === "questionnaire_response") return QUESTIONNAIRE_RESPONSES;
-  if (item.groupKey) return EXAM_GROUP_VALUES;
-  if (item.progress) return PROGRESS_SUMMARIES;
-  return STORE;
+  const entityType = item.entityType || toSyncEnvelope(item).entityType;
+  if (entityType === "questionnaire_response") return QUESTIONNAIRE_RESPONSES;
+  if (entityType === "schedule_group") return SCHEDULE_GROUPS;
+  if (entityType === "schedule_patient") return SCHEDULE_PATIENTS;
+  if (entityType === "exam_group_value") return EXAM_GROUP_VALUES;
+  if (entityType === "progress_summary") return PROGRESS_SUMMARIES;
+  if (entityType === "record_header") return STORE;
+  return null;
 }
 
-async function pullCloud() {
+async function pullCloud(options = {}) {
   const settings = await getCloudSettings();
+  const { silent = false, schedulesOnly = false } = options;
   if (!settings.url) {
-    toast("クラウド同期API URLを設定してください", true);
+    if (!silent) toast("クラウド同期API URLを設定してください", true);
     return;
   }
   try {
@@ -1701,18 +1735,38 @@ async function pullCloud() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const records = await response.json();
     if (!Array.isArray(records)) throw new Error("クラウド応答は配列にしてください");
+    let imported = 0;
+    let importedSchedules = 0;
+    const now = new Date().toISOString();
     for (const record of records) {
-      await put(STORE, {
+      const storeName = getSyncStoreName(record);
+      if (!storeName) continue;
+      const isSchedule = storeName === SCHEDULE_GROUPS || storeName === SCHEDULE_PATIENTS;
+      if (schedulesOnly && !isSchedule) continue;
+      await put(storeName, {
         ...record,
         syncState: "synced",
-        updatedAt: record.updatedAt || new Date().toISOString()
+        lastSyncError: "",
+        updatedAt: record.updatedAt || now
       });
+      imported += 1;
+      if (isSchedule) importedSchedules += 1;
     }
+    if (importedSchedules) await selectLatestScheduleGroupIfNeeded();
+    await loadActiveGroup();
+    await refreshScheduleRows();
     await refreshRows();
-    toast(`${records.length}件を読み込みました`);
+    if (!silent) toast(`${imported}件を読み込みました`);
   } catch (error) {
-    toast(`クラウド読込に失敗しました: ${error.message}`, true);
+    if (!silent) toast(`クラウド読込に失敗しました: ${error.message}`, true);
   }
+}
+
+async function selectLatestScheduleGroupIfNeeded() {
+  const activeId = (await getOne(SETTINGS, "activeScheduleGroupId"))?.value || "";
+  if (activeId && await getOne(SCHEDULE_GROUPS, activeId)) return;
+  const groups = (await getAll(SCHEDULE_GROUPS)).sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+  if (groups[0]) await put(SETTINGS, { key: "activeScheduleGroupId", value: groups[0].id });
 }
 
 async function sendToCloud(settings, record) {
