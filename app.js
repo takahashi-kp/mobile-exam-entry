@@ -674,13 +674,18 @@ function evaluateGuidanceSelection() {
   const waist = parseDecimal(guidanceFields.waist?.value || "");
   const age = birthDate ? ageAtFiscalYearEnd(birthDate, year) : null;
   const bmi = height && weight ? weight / ((height / 100) ** 2) : null;
+  const waistTarget = waist ? (sex === "男性" ? waist >= 85 : waist >= 90) : null;
+  const bodyTarget = bmi == null && waistTarget == null ? null : (bmi != null && bmi >= 25) || waistTarget === true;
+  const bodyText = [
+    bmi == null ? "BMI 未入力" : `BMI ${bmi.toFixed(1)}`,
+    waist ? `腹囲 ${waist}cm` : "腹囲 未入力"
+  ].join(" / ");
   const items = [
     makeGuidanceItem("保険", insurance === "はい" ? true : insurance === "いいえ" ? false : null, insurance || "未入力", "協会・紙商・水産連合が『はい』なら対象"),
     makeGuidanceItem("年度末年齢", age == null ? null : age >= 40 && age < 75, age == null ? "未入力" : `${age}歳`, "40歳未満、75歳以上は対象外"),
     makeGuidanceItem("HbA1c・食後時間", hba1c && mealTime ? !(hba1c === "なし" && mealTime === "3.5時間以内") : null, hba1c && mealTime ? `${hba1c} / ${mealTime}` : "未入力", "HbA1cなし、3.5時間以内は対象外"),
     makeGuidanceItem("内服", medication ? medication === "なし" : null, medication || "未入力", "血圧・血糖・脂質の内服ありは対象外"),
-    makeGuidanceItem("BMI", bmi == null ? null : bmi >= 25, bmi == null ? "未入力" : bmi.toFixed(1), "BMI 25未満は対象外"),
-    makeGuidanceItem("腹囲", waist ? (sex === "男性" ? waist >= 85 : waist >= 90) : null, waist ? `${waist}cm` : "未入力", "男性85cm以上、女性90cm以上なら対象")
+    makeGuidanceItem("BMI・腹囲", bodyTarget, bodyText, "BMI 25以上、または腹囲が男性85cm以上・女性90cm以上なら対象")
   ];
   const hasMissing = items.some((item) => item.status === "pending");
   const hasExcluded = items.some((item) => item.status === "excluded");
