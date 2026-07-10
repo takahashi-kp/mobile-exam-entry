@@ -1,5 +1,5 @@
 const DB_NAME = "mobile-exam-entry";
-const DEFAULT_CLOUD_URL = "https://mobile-exam-entry-b6w9.onrender.com/api/exam-records";
+const DEFAULT_CLOUD_URL = "https://mobile-exam-entry-b6w9-z574.onrender.com/api/exam-records";
 const STORE = "records";
 const SETTINGS = "settings";
 const SCHEDULE_GROUPS = "scheduleGroups";
