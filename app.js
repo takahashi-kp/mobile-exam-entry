@@ -232,6 +232,9 @@ let db;
 let isDirty = false;
 let isProgrammaticChange = false;
 let personalValueBeforeEdit = "";
+let syncInProgress = false;
+let pullInProgress = false;
+let lastAutomaticRefreshAt = 0;
 const questionnaireChoiceState = new WeakMap();
 
 init();
@@ -245,20 +248,25 @@ async function init() {
   setupCollapsibleGroups();
   bindUi();
   await loadSettings();
-  if (navigator.onLine) await pullCloud({ silent: true });
+  await prepareSyncSchemaV2();
+  if (navigator.onLine) await syncAndRefresh({ force: true });
   await loadActiveGroup();
   await refreshScheduleRows();
   await refreshRows();
   updateOnlineStatus();
   window.addEventListener("online", () => {
     updateOnlineStatus();
-    syncPending().then(() => pullCloud({ silent: true })).catch(() => {});
+    syncAndRefresh({ force: true }).catch(() => {});
   });
   window.addEventListener("offline", updateOnlineStatus);
+  window.addEventListener("focus", () => syncAndRefresh().catch(() => {}));
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") syncAndRefresh().catch(() => {});
+  });
+  window.setInterval(() => syncAndRefresh().catch(() => {}), 30000);
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("./sw.js").catch(() => {});
   }
-  if (navigator.onLine) syncPending();
 }
 
 function openDb() {
@@ -595,6 +603,7 @@ async function switchView(view) {
   document.querySelectorAll(".view").forEach((panel) => {
     panel.classList.toggle("is-visible", panel.id === `${view}View`);
   });
+  if (navigator.onLine) await syncAndRefresh();
   if (view === "records") await refreshRows();
   if (view === "schedules") await refreshScheduleRows();
   if (view === "sync") await refreshCleanupSummary();
@@ -976,10 +985,11 @@ async function saveRecordData(data, options = {}) {
   }
   const now = new Date().toISOString();
   const existing = editingId ? await getOne(STORE, editingId) : await findRecordByPatient(data["個人番号"]);
-  const recordId = existing?.id || crypto.randomUUID();
+  const recordId = existing?.id || stableRecordId(activeGroup?.id || "", data["個人番号"] || "") || crypto.randomUUID();
   const headerData = pickHeaderData(data);
   const record = {
     id: recordId,
+    entityType: "record_header",
     createdAt: existing?.createdAt || now,
     updatedAt: now,
     syncState: "pending",
@@ -987,6 +997,7 @@ async function saveRecordData(data, options = {}) {
     scheduleGroupId: activeGroup?.id || existing?.scheduleGroupId || "",
     scheduleGroupName: activeGroup?.name || existing?.scheduleGroupName || "",
     patientCode: data["個人番号"] || existing?.patientCode || "",
+    patientKey: `${activeGroup?.id || existing?.scheduleGroupId || "nogroup"}::${data["個人番号"] || existing?.patientCode || ""}`,
     data: headerData
   };
   await put(STORE, record);
@@ -1018,15 +1029,17 @@ async function findRecordByPatient(patientCode) {
 }
 
 async function saveGroupValues(record, data, now) {
-  const existingValues = await getGroupValuesForRecord(record.id);
+  const existingValues = await getGroupValuesForRecord(record);
   const existingByGroup = new Map(existingValues.map((item) => [item.groupKey, item]));
   for (const group of PROGRESS_GROUPS) {
     const values = pickFields(data, group.fields);
     const hasValue = Object.values(values).some((value) => String(value || "").trim());
     const existing = existingByGroup.get(group.target);
     if (!hasValue && !existing) continue;
+    const patientKey = recordPatientKey(record);
     const item = {
-      id: `${record.id}::${group.target}`,
+      id: stableGroupValueId(patientKey, group.target),
+      entityType: "exam_group_value",
       recordId: record.id,
       tenantId: "local",
       scheduleGroupId: record.scheduleGroupId || "",
@@ -1050,7 +1063,8 @@ async function saveProgressSummary(record, data, now) {
     progress[group.target] = group.fields.some((field) => String(data[field] || "").trim()) ? "済" : "未";
   }
   await put(PROGRESS_SUMMARIES, {
-    id: record.id,
+    id: `progress::${recordPatientKey(record)}`,
+    entityType: "progress_summary",
     recordId: record.id,
     tenantId: "local",
     scheduleGroupId: record.scheduleGroupId || "",
@@ -1066,12 +1080,31 @@ function pickFields(data, fields) {
   return Object.fromEntries(fields.map((field) => [field, data[field] || ""]));
 }
 
-async function getGroupValuesForRecord(recordId) {
-  return (await getAll(EXAM_GROUP_VALUES)).filter((item) => item.recordId === recordId);
+function stableRecordId(scheduleGroupId, patientCode) {
+  const code = String(patientCode || "").trim();
+  if (!code) return "";
+  return `record::${scheduleGroupId || "nogroup"}::${code}`;
+}
+
+function recordPatientKey(record) {
+  return record.patientKey || `${record.scheduleGroupId || "nogroup"}::${record.patientCode || record.data?.["個人番号"] || ""}`;
+}
+
+function stableGroupValueId(patientKey, groupKey) {
+  return `exam::${patientKey || "nogroup::no-code"}::${groupKey}`;
+}
+
+async function getGroupValuesForRecord(record) {
+  const patientKey = typeof record === "string" ? "" : recordPatientKey(record);
+  const recordId = typeof record === "string" ? record : record.id;
+  return (await getAll(EXAM_GROUP_VALUES)).filter((item) => {
+    const itemPatientKey = item.patientKey || `${item.scheduleGroupId || "nogroup"}::${item.patientCode || ""}`;
+    return patientKey ? itemPatientKey === patientKey : item.recordId === recordId;
+  });
 }
 
 async function assembleRecordData(record) {
-  const groupValues = await getGroupValuesForRecord(record.id);
+  const groupValues = await getGroupValuesForRecord(record);
   return groupValues.reduce((data, group) => ({ ...data, ...group.values }), { ...(record.data || {}) });
 }
 
@@ -1621,6 +1654,9 @@ async function syncPending() {
     syncMessage.textContent = "クラウド同期API URLを設定すると、オンライン時に自動同期します。";
     return;
   }
+  if (syncInProgress) return;
+  syncInProgress = true;
+  try {
   const pendingRecords = (await getAll(STORE)).filter((record) => record.syncState !== "synced");
   const pendingGroups = (await getAll(EXAM_GROUP_VALUES)).filter((item) => item.syncState !== "synced");
   const pendingProgress = (await getAll(PROGRESS_SUMMARIES)).filter((item) => item.syncState !== "synced");
@@ -1654,6 +1690,9 @@ async function syncPending() {
     ...(await getAll(SCHEDULE_PATIENTS))
   ].filter((item) => item.syncState === "error").length;
   syncMessage.textContent = failed ? `${failed}件の同期に失敗しました。URLとAPIキーを確認してください。` : "同期が完了しました。";
+  } finally {
+    syncInProgress = false;
+  }
 }
 
 async function refreshCleanupSummary() {
@@ -1689,7 +1728,7 @@ async function deleteSyncedLocalData() {
   if (!ok) return;
   for (const record of synced) {
     await deleteOne(STORE, record.id);
-    const groupValues = await getGroupValuesForRecord(record.id);
+    const groupValues = await getGroupValuesForRecord(record);
     for (const item of groupValues) {
       await deleteOne(EXAM_GROUP_VALUES, item.id);
     }
@@ -1731,6 +1770,8 @@ async function pullCloud(options = {}) {
     if (!silent) toast("クラウド同期API URLを設定してください", true);
     return;
   }
+  if (pullInProgress) return;
+  pullInProgress = true;
   try {
     const response = await fetch(settings.url, { headers: cloudHeaders(settings) });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -1739,17 +1780,32 @@ async function pullCloud(options = {}) {
     let imported = 0;
     let importedSchedules = 0;
     const now = new Date().toISOString();
-    for (const record of records) {
+    for (const cloudRecord of records) {
+      const record = normalizeCloudRecord(cloudRecord);
       const storeName = getSyncStoreName(record);
       if (!storeName) continue;
       const isSchedule = storeName === SCHEDULE_GROUPS || storeName === SCHEDULE_PATIENTS;
       if (schedulesOnly && !isSchedule) continue;
-      await put(storeName, {
+      const remoteValue = {
         ...record,
         syncState: "synced",
         lastSyncError: "",
         updatedAt: record.updatedAt || now
-      });
+      };
+      const localValue = await getOne(storeName, remoteValue.id);
+      if (localValue?.syncState === "pending" || localValue?.syncState === "error") {
+        await put(storeName, {
+          ...mergeWithoutErasing(remoteValue, localValue),
+          syncState: localValue.syncState,
+          lastSyncError: localValue.lastSyncError || ""
+        });
+      } else {
+        await put(storeName, {
+          ...mergeWithoutErasing(localValue || {}, remoteValue),
+          syncState: "synced",
+          lastSyncError: ""
+        });
+      }
       imported += 1;
       if (isSchedule) importedSchedules += 1;
     }
@@ -1760,7 +1816,80 @@ async function pullCloud(options = {}) {
     if (!silent) toast(`${imported}件を読み込みました`);
   } catch (error) {
     if (!silent) toast(`クラウド読込に失敗しました: ${error.message}`, true);
+  } finally {
+    pullInProgress = false;
   }
+}
+
+function normalizeCloudRecord(record) {
+  const entityType = record.entityType || toSyncEnvelope(record).entityType;
+  const patientCode = record.patientCode || record.data?.["個人番号"] || record["受診者コード"] || "";
+  const patientKey = record.patientKey || `${record.scheduleGroupId || record.groupId || "nogroup"}::${patientCode}`;
+  if (entityType === "record_header") {
+    return { ...record, entityType, patientKey, id: stableRecordId(record.scheduleGroupId || "", patientCode) || record.id };
+  }
+  if (entityType === "exam_group_value") {
+    return { ...record, entityType, patientKey, id: stableGroupValueId(patientKey, record.groupKey) };
+  }
+  if (entityType === "progress_summary") {
+    return { ...record, entityType, patientKey, id: `progress::${patientKey}` };
+  }
+  return { ...record, entityType };
+}
+
+function hasSyncValue(value) {
+  if (value == null) return false;
+  if (typeof value === "string") return Boolean(value.trim());
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === "object") return Object.keys(value).length > 0;
+  return true;
+}
+
+function mergeWithoutErasing(base, incoming) {
+  const merged = { ...(base || {}) };
+  for (const [key, value] of Object.entries(incoming || {})) {
+    const oldValue = merged[key];
+    if (oldValue && value && typeof oldValue === "object" && typeof value === "object" && !Array.isArray(oldValue) && !Array.isArray(value)) {
+      merged[key] = mergeWithoutErasing(oldValue, value);
+    } else if (hasSyncValue(value) || !hasSyncValue(oldValue)) {
+      merged[key] = value;
+    }
+  }
+  return merged;
+}
+
+async function syncAndRefresh(options = {}) {
+  if (!navigator.onLine) return;
+  const now = Date.now();
+  const minInterval = options.force ? 0 : 3000;
+  if (now - lastAutomaticRefreshAt < minInterval) return;
+  lastAutomaticRefreshAt = now;
+  await syncPending();
+  if (syncInProgress) return;
+  await pullCloud({ silent: true });
+}
+
+async function prepareSyncSchemaV2() {
+  const migrationKey = "syncSchemaV2Reseeded";
+  if ((await getOne(SETTINGS, migrationKey))?.value) return;
+  const stores = [STORE, EXAM_GROUP_VALUES, PROGRESS_SUMMARIES, QUESTIONNAIRE_RESPONSES, SCHEDULE_GROUPS, SCHEDULE_PATIENTS];
+  for (const storeName of stores) {
+    const items = await getAll(storeName);
+    for (const item of items) {
+      const normalized = normalizeCloudRecord(item);
+      // Reseed the original id as well. Legacy random ids are retained until
+      // the server history has received them, prioritizing recoverability over
+      // aggressive local cleanup.
+      await put(storeName, { ...item, syncState: "pending", lastSyncError: "" });
+      const existing = await getOne(storeName, normalized.id);
+      await put(storeName, {
+        ...mergeWithoutErasing(existing || {}, normalized),
+        syncState: "pending",
+        lastSyncError: ""
+      });
+    }
+  }
+  await put(SETTINGS, { key: migrationKey, value: true });
 }
 
 async function selectLatestScheduleGroupIfNeeded() {
@@ -1771,12 +1900,22 @@ async function selectLatestScheduleGroupIfNeeded() {
 }
 
 async function sendToCloud(settings, record) {
+  const deviceId = await getSyncDeviceId();
   const response = await fetch(settings.url, {
     method: "POST",
     headers: cloudHeaders(settings),
-    body: JSON.stringify(record)
+    body: JSON.stringify({ ...record, syncDeviceId: deviceId })
   });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
+}
+
+async function getSyncDeviceId() {
+  const key = "syncDeviceId";
+  const existing = (await getOne(SETTINGS, key))?.value;
+  if (existing) return existing;
+  const value = crypto.randomUUID();
+  await put(SETTINGS, { key, value });
+  return value;
 }
 
 function cloudHeaders(settings) {

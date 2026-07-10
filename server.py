@@ -57,17 +57,42 @@ def ensure_schema():
     if db_error:
         return db_error
     with connect() as conn:
+        # Keep the original sync_records table untouched as a migration backup.
+        # Version 2 uses a composite key because different entity types may
+        # legitimately share the same client id.
         conn.execute(
             """
-            create table if not exists sync_records (
-              id text primary key,
+            create table if not exists sync_records_v2 (
+              id text not null,
               entity_type text not null,
               payload jsonb not null,
-              updated_at timestamptz not null default now()
+              updated_at timestamptz not null default now(),
+              primary key (entity_type, id)
             )
             """
         )
-        conn.execute("create index if not exists sync_records_entity_type_idx on sync_records(entity_type)")
+        conn.execute("create index if not exists sync_records_v2_entity_type_idx on sync_records_v2(entity_type)")
+        conn.execute(
+            """
+            create table if not exists sync_record_history (
+              history_id bigserial primary key,
+              id text not null,
+              entity_type text not null,
+              payload jsonb not null,
+              received_at timestamptz not null default now()
+            )
+            """
+        )
+        conn.execute("create index if not exists sync_record_history_record_idx on sync_record_history(entity_type, id)")
+        legacy_exists = conn.execute("select to_regclass('public.sync_records') as table_name").fetchone()
+        if legacy_exists and legacy_exists["table_name"]:
+            conn.execute(
+                """
+                insert into sync_records_v2 (id, entity_type, payload, updated_at)
+                select id, entity_type, payload, updated_at from sync_records
+                on conflict (entity_type, id) do nothing
+                """
+            )
     return None
 
 
@@ -84,7 +109,7 @@ def get_exam_records():
     if db_error:
         return db_error
     with connect() as conn:
-        rows = conn.execute("select payload from sync_records order by updated_at asc").fetchall()
+        rows = conn.execute("select payload from sync_records_v2 order by updated_at asc").fetchall()
     return json_response([row["payload"] for row in rows])
 
 
@@ -105,22 +130,62 @@ def post_exam_record():
     record["updatedAt"] = record.get("updatedAt") or utc_now().isoformat()
     with connect() as conn:
         conn.execute(
+            "select pg_advisory_xact_lock(hashtextextended(%s, 0))",
+            (f"{entity_type}::{record_id}",),
+        )
+        existing = conn.execute(
+            "select payload from sync_records_v2 where entity_type = %s and id = %s for update",
+            (entity_type, record_id),
+        ).fetchone()
+        merged_record = merge_payload(existing["payload"] if existing else {}, record)
+        conn.execute(
+            "insert into sync_record_history (id, entity_type, payload) values (%s, %s, %s)",
+            (record_id, entity_type, Jsonb(record)),
+        )
+        conn.execute(
             """
-            insert into sync_records (id, entity_type, payload, updated_at)
+            insert into sync_records_v2 (id, entity_type, payload, updated_at)
             values (%s, %s, %s, now())
-            on conflict (id) do update set
-              entity_type = excluded.entity_type,
+            on conflict (entity_type, id) do update set
               payload = excluded.payload,
               updated_at = now()
             """,
-            (record_id, entity_type, Jsonb(record)),
+            (record_id, entity_type, Jsonb(merged_record)),
         )
     return json_response({"ok": True})
 
 
+def has_value(value):
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    if isinstance(value, (list, dict)):
+        return bool(value)
+    return True
+
+
+def merge_payload(existing, incoming):
+    """Merge without allowing an empty offline value to erase measured data.
+
+    Every raw POST is retained in sync_record_history before this merged view is
+    updated, so an operator can recover earlier measurements if necessary.
+    """
+    if not isinstance(existing, dict):
+        existing = {}
+    merged = dict(existing)
+    for key, value in incoming.items():
+        old_value = merged.get(key)
+        if isinstance(old_value, dict) and isinstance(value, dict):
+            merged[key] = merge_payload(old_value, value)
+        elif has_value(value) or not has_value(old_value):
+            merged[key] = value
+    return merged
+
+
 @app.route("/healthz")
 def healthz():
-    return json_response({"ok": True, "databaseConfigured": bool(DATABASE_URL)})
+    return json_response({"ok": True, "databaseConfigured": bool(DATABASE_URL), "syncSchema": 2})
 
 
 @app.route("/")
