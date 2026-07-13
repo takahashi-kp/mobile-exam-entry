@@ -1,3 +1,5 @@
+import { evaluateGuidanceAge, formatJapaneseDate } from "./guidance.js?v=20260713-01";
+
 const DB_NAME = "mobile-exam-entry";
 const DEFAULT_CLOUD_URL = "https://mobile-exam-entry-b6w9-z574.onrender.com/api/exam-records";
 const STORE = "records";
@@ -214,6 +216,7 @@ const guidanceFields = {
   sex: document.querySelector("#guidanceSex"),
   insurance: document.querySelector("#guidanceInsurance"),
   birthDate: document.querySelector("#guidanceBirthDate"),
+  examDate: document.querySelector("#guidanceExamDate"),
   hba1c: document.querySelector("#guidanceHba1c"),
   mealTime: document.querySelector("#guidanceMealTime"),
   medication: document.querySelector("#guidanceMedication"),
@@ -630,6 +633,7 @@ function hydrateGuidanceFromEntry(overwrite = false) {
   setGuidanceValue(guidanceFields.year, String(defaultFiscalYear()), overwrite);
   setGuidanceValue(guidanceFields.sex, normalizeGuidanceSex(data["性別名称"]), overwrite);
   setGuidanceValue(guidanceFields.birthDate, data["生年月日"] || "", overwrite);
+  setGuidanceValue(guidanceFields.examDate, todayGuidanceDateValue(), false);
   setGuidanceValue(guidanceFields.height, data["身長"] || "", overwrite);
   setGuidanceValue(guidanceFields.weight, data["体重"] || "", overwrite);
   setGuidanceValue(guidanceFields.waist, data["腹囲"] || "", overwrite);
@@ -653,6 +657,7 @@ function clearGuidanceSelection() {
     field.value = field.tagName === "SELECT" ? field.options[0]?.value || "" : "";
   });
   if (guidanceFields.year) guidanceFields.year.value = String(defaultFiscalYear());
+  if (guidanceFields.examDate) guidanceFields.examDate.value = todayGuidanceDateValue();
   updateGuidanceSelection();
   guidanceFields.birthDate?.focus();
 }
@@ -678,13 +683,14 @@ function evaluateGuidanceSelection() {
   const sex = guidanceFields.sex?.value || "男性";
   const insurance = guidanceFields.insurance?.value || "";
   const birthDate = parseGuidanceDate(guidanceFields.birthDate?.value || "");
+  const examDate = parseGuidanceDate(guidanceFields.examDate?.value || "");
   const hba1c = guidanceFields.hba1c?.value || "";
   const mealTime = guidanceFields.mealTime?.value || "";
   const medication = guidanceFields.medication?.value || "";
   const height = parseDecimal(guidanceFields.height?.value || "");
   const weight = parseDecimal(guidanceFields.weight?.value || "");
   const waist = parseDecimal(guidanceFields.waist?.value || "");
-  const age = birthDate ? ageAtFiscalYearEnd(birthDate, year) : null;
+  const ageResult = evaluateGuidanceAge(birthDate, year, examDate);
   const bmi = height && weight ? weight / ((height / 100) ** 2) : null;
   const waistTarget = waist ? (sex === "男性" ? waist >= 85 : waist >= 90) : null;
   const bodyTarget = bmi == null && waistTarget == null ? null : (bmi != null && bmi >= 25) || waistTarget === true;
@@ -692,9 +698,12 @@ function evaluateGuidanceSelection() {
     bmi == null ? "BMI 未入力" : `BMI ${bmi.toFixed(1)}`,
     waist ? `腹囲 ${waist}cm` : "腹囲 未入力"
   ].join(" / ");
+  const ageText = ageResult.fiscalYearEndAge == null
+    ? "未入力"
+    : `年度末 ${ageResult.fiscalYearEndAge}歳 / 受診日 ${ageResult.examAge}歳${ageResult.completionDeadline ? ` / 期限 ${formatJapaneseDate(ageResult.completionDeadline)}` : ""}`;
   const items = [
     makeGuidanceItem("保険", insurance === "はい" ? true : insurance === "いいえ" ? false : null, insurance || "未入力", "協会・紙商・水産連合が『はい』なら対象"),
-    makeGuidanceItem("年度末年齢", age == null ? null : age >= 40 && age < 75, age == null ? "未入力" : `${age}歳`, "40歳未満、75歳以上は対象外"),
+    makeGuidanceItem("年齢・保健指導期限", ageResult.included, ageText, ageResult.reason),
     makeGuidanceItem("HbA1c・食後時間", hba1c && mealTime ? !(hba1c === "なし" && mealTime === "3.5時間以内") : null, hba1c && mealTime ? `${hba1c} / ${mealTime}` : "未入力", "HbA1cなし、3.5時間以内は対象外"),
     makeGuidanceItem("内服", medication ? medication === "なし" : null, medication || "未入力", "血圧・血糖・脂質の内服ありは対象外"),
     makeGuidanceItem("BMI・腹囲", bodyTarget, bodyText, "BMI 25以上、または腹囲が男性85cm以上・女性90cm以上なら対象")
@@ -707,7 +716,10 @@ function evaluateGuidanceSelection() {
   if (hasMissing) {
     return { finalLabel: "--", finalClass: "pending", summary: "未入力の条件があります", items };
   }
-  return { finalLabel: "保健指導あり", finalClass: "target", summary: "Excel条件をすべて満たしています", items };
+  const deadlineLabel = ageResult.examAge === 74 && ageResult.completionDeadline
+    ? `（${formatJapaneseDate(ageResult.completionDeadline)}までに保健指導完了する場合）`
+    : "";
+  return { finalLabel: `保健指導あり${deadlineLabel}`, finalClass: deadlineLabel ? "target deadline" : "target", summary: "すべての条件を満たしています", items };
 }
 
 function makeGuidanceItem(label, included, text, detail) {
@@ -726,15 +738,13 @@ function parseGuidanceDate(value) {
   const match = normalized.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
   if (!match) return null;
   const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
-  return Number.isNaN(date.getTime()) ? null : date;
+  const valid = date.getFullYear() === Number(match[1]) && date.getMonth() === Number(match[2]) - 1 && date.getDate() === Number(match[3]);
+  return valid ? date : null;
 }
 
-function ageAtFiscalYearEnd(birthDate, fiscalYear) {
-  const end = new Date(fiscalYear + 1, 2, 31);
-  let age = end.getFullYear() - birthDate.getFullYear();
-  const beforeBirthday = end.getMonth() < birthDate.getMonth() || (end.getMonth() === birthDate.getMonth() && end.getDate() < birthDate.getDate());
-  if (beforeBirthday) age -= 1;
-  return age;
+function todayGuidanceDateValue() {
+  const today = new Date();
+  return `${today.getFullYear()}/${today.getMonth() + 1}/${today.getDate()}`;
 }
 
 function defaultFiscalYear() {

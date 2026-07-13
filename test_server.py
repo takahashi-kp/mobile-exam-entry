@@ -15,13 +15,17 @@ class MergePayloadTests(unittest.TestCase):
 
         index = client.get("/")
         script = client.get("/app.js")
+        guidance = client.get("/guidance.js")
 
         self.assertEqual(index.status_code, 200)
-        self.assertIn(b"app.js?v=20260710-01", index.data)
+        self.assertIn(b"app.js?v=20260713-01", index.data)
         self.assertEqual(script.status_code, 200)
         self.assertIn(b"syncSchemaV2Reseeded", script.data)
+        self.assertEqual(guidance.status_code, 200)
+        self.assertIn(b"evaluateGuidanceAge", guidance.data)
         index.close()
         script.close()
+        guidance.close()
 
     def test_different_exam_fields_are_combined(self):
         existing = {"entityType": "exam_group_value", "values": {"身長": "170.0", "体重": ""}}
