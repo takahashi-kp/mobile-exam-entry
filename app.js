@@ -1504,6 +1504,8 @@ function updateActiveGroupLabel() {
 
 async function refreshScheduleRows() {
   if (!scheduleRows) return;
+  const focusedCustomerInput = document.activeElement?.closest?.("[data-customer-group-id]");
+  if (focusedCustomerInput && scheduleRows.contains(focusedCustomerInput)) return;
   const groups = (await getAll(SCHEDULE_GROUPS)).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   scheduleRows.innerHTML = "";
   for (const group of groups) {
@@ -2003,10 +2005,6 @@ async function exportRosters() {
     toast("予定管理で出力するグループを選択してください", true);
     return;
   }
-  if (!activeGroup.customerName) {
-    toast("予定管理で顧客名を入力してください", true);
-    return;
-  }
   if (isDirty && hasCurrentInput()) {
     toast("未保存の入力があります。先に保存してから連名簿を出力してください", true);
     return;
@@ -2063,7 +2061,7 @@ async function exportRosters() {
         headers: cloudHeaders(settings),
         body: JSON.stringify({
           kind: item.kind,
-          customerName: activeGroup.customerName,
+          customerName: activeGroup.customerName || "",
           examDate: localIsoDate(examDate),
           rows: item.rows
         })

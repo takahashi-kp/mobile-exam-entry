@@ -18,7 +18,7 @@ class MergePayloadTests(unittest.TestCase):
         guidance = client.get("/guidance.js")
 
         self.assertEqual(index.status_code, 200)
-        self.assertIn(b"app.js?v=20260714-04", index.data)
+        self.assertIn(b"app.js?v=20260714-05", index.data)
         self.assertIn(b'id="appToast"', index.data)
         self.assertIn("塵肺・アスベスト".encode(), index.data)
         self.assertIn("顧客名".encode(), index.data)
