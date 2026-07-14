@@ -1835,14 +1835,22 @@ async function pullCloud(options = {}) {
       };
       const localValue = await getOne(storeName, remoteValue.id);
       if (localValue?.syncState === "pending" || localValue?.syncState === "error") {
+        const mergedValue = mergeWithoutErasing(remoteValue, localValue);
+        if (storeName === SCHEDULE_GROUPS && Object.prototype.hasOwnProperty.call(localValue, "customerName")) {
+          mergedValue.customerName = localValue.customerName;
+        }
         await put(storeName, {
-          ...mergeWithoutErasing(remoteValue, localValue),
+          ...mergedValue,
           syncState: localValue.syncState,
           lastSyncError: localValue.lastSyncError || ""
         });
       } else {
+        const mergedValue = mergeWithoutErasing(localValue || {}, remoteValue);
+        if (storeName === SCHEDULE_GROUPS && Object.prototype.hasOwnProperty.call(remoteValue, "customerName")) {
+          mergedValue.customerName = remoteValue.customerName;
+        }
         await put(storeName, {
-          ...mergeWithoutErasing(localValue || {}, remoteValue),
+          ...mergedValue,
           syncState: "synced",
           lastSyncError: ""
         });
@@ -2013,6 +2021,7 @@ async function exportRosters() {
     toast("連名簿の作成にはオンライン接続が必要です", true);
     return;
   }
+  if (!window.confirm(`予定グループ「${activeGroup.name}」の胸部・胃部連名簿を出力しますか？`)) return;
 
   let directoryHandle = null;
   if (window.showDirectoryPicker) {

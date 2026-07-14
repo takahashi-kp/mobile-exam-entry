@@ -47,6 +47,23 @@ class RosterExportTests(unittest.TestCase):
         self.assertEqual(sheet["C8"].value, "'+CMD")
         self.assertEqual(sheet["F8"].value, "'@001")
 
+    def test_roster_is_sorted_and_matches_print_settings(self):
+        rows = [
+            {"nameKana": "サン", "filmNumber": "10"},
+            {"nameKana": "イチ", "filmNumber": "1"},
+            {"nameKana": "ニ", "filmNumber": "2"},
+        ]
+
+        output = build_roster("chest", "", "2026-07-14", rows)
+        sheet = load_workbook(output, data_only=False).active
+
+        self.assertEqual([sheet[f"F{row}"].value for row in range(8, 11)], ["1", "2", "10"])
+        self.assertEqual(sheet.print_title_rows, "$7:$7")
+        self.assertEqual(sheet.page_setup.paperSize, 9)
+        self.assertEqual(sheet.page_setup.orientation, "portrait")
+        self.assertFalse(any(cell.comment for row in sheet.iter_rows() for cell in row))
+        self.assertFalse(any(isinstance(cell.value, str) and cell.value.startswith("※印刷") for row in sheet.iter_rows() for cell in row))
+
 
 if __name__ == "__main__":
     unittest.main()

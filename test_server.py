@@ -18,7 +18,7 @@ class MergePayloadTests(unittest.TestCase):
         guidance = client.get("/guidance.js")
 
         self.assertEqual(index.status_code, 200)
-        self.assertIn(b"app.js?v=20260714-05", index.data)
+        self.assertIn(b"app.js?v=20260714-06", index.data)
         self.assertIn(b'id="appToast"', index.data)
         self.assertIn("塵肺・アスベスト".encode(), index.data)
         self.assertIn("顧客名".encode(), index.data)
@@ -70,6 +70,14 @@ class MergePayloadTests(unittest.TestCase):
         merged = merge_payload(existing, incoming)
 
         self.assertEqual(merged["values"]["1回目最高血圧"], "128")
+
+    def test_empty_customer_name_removes_previous_name(self):
+        existing = {"entityType": "schedule_group", "customerName": "旧顧客名"}
+        incoming = {"entityType": "schedule_group", "customerName": ""}
+
+        merged = merge_payload(existing, incoming)
+
+        self.assertEqual(merged["customerName"], "")
 
 
 if __name__ == "__main__":

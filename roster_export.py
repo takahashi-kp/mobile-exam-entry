@@ -2,6 +2,7 @@ from copy import copy
 from datetime import date, datetime
 from io import BytesIO
 from pathlib import Path
+import re
 
 from openpyxl import load_workbook
 
@@ -53,6 +54,13 @@ def copy_row_style(sheet, source_row, target_row, min_col=3, max_col=7):
         target.protection = copy(source.protection)
 
 
+def film_number_sort_key(item):
+    value = str(item.get("filmNumber") or "").strip()
+    parts = re.split(r"(\d+)", value.casefold())
+    natural = tuple((0, int(part)) if part.isdigit() else (1, part) for part in parts if part)
+    return (not bool(value), natural)
+
+
 def build_roster(kind, customer_name, exam_date, rows):
     if kind not in TEMPLATES:
         raise ValueError("Unknown roster type")
@@ -63,8 +71,20 @@ def build_roster(kind, customer_name, exam_date, rows):
 
     workbook = load_workbook(TEMPLATES[kind])
     sheet = workbook.active
+    rows = sorted(rows, key=film_number_sort_key)
     sheet["C4"] = safe_text(customer_name, 100)
     sheet["E4"] = japanese_date(exam_date)
+
+    for row in sheet.iter_rows():
+        for cell in row:
+            if cell.comment is not None:
+                cell.comment = None
+            if isinstance(cell.value, str) and cell.value.startswith("※印刷"):
+                cell.value = None
+
+    sheet.print_title_rows = "7:7"
+    sheet.page_setup.paperSize = sheet.PAPERSIZE_A4
+    sheet.page_setup.orientation = sheet.ORIENTATION_PORTRAIT
 
     for row_number in range(8, 1001):
         for col in range(3, 8):
