@@ -50,6 +50,7 @@ class RosterExportTests(unittest.TestCase):
     def test_roster_is_sorted_and_matches_print_settings(self):
         rows = [
             {"nameKana": "サン", "filmNumber": "10"},
+            {"nameKana": "ヨン", "filmNumber": "4"},
             {"nameKana": "イチ", "filmNumber": "1"},
             {"nameKana": "ニ", "filmNumber": "2"},
         ]
@@ -57,9 +58,12 @@ class RosterExportTests(unittest.TestCase):
         output = build_roster("chest", "", "2026-07-14", rows)
         sheet = load_workbook(output, data_only=False).active
 
-        self.assertEqual([sheet[f"F{row}"].value for row in range(8, 11)], ["1", "2", "10"])
+        self.assertEqual([sheet[f"F{row}"].value for row in range(8, 12)], ["1", "2", "4", "10"])
+        self.assertEqual(sheet["I8"].value, '=IF(OR(F6+1=F8,F6="",F8=""),"","★")')
+        self.assertEqual(sheet["I11"].value, '=IF(OR(F10+1=F11,F10="",F11=""),"","★")')
+        self.assertIsNone(sheet["I12"].value)
         self.assertEqual(sheet.print_title_rows, "$7:$7")
-        self.assertEqual(str(sheet.print_area), "'胸部'!$B$2:$G$10")
+        self.assertEqual(str(sheet.print_area), "'胸部'!$B$2:$G$11")
         self.assertEqual(sheet.page_setup.paperSize, 9)
         self.assertEqual(sheet.page_setup.orientation, "portrait")
         self.assertFalse(any(cell.comment for row in sheet.iter_rows() for cell in row))

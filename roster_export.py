@@ -91,6 +91,7 @@ def build_roster(kind, customer_name, exam_date, rows):
     for row_number in range(8, 1001):
         for col in range(3, 8):
             sheet.cell(row_number, col).value = None
+        sheet.cell(row_number, 9).value = None
 
     for index, item in enumerate(rows, start=8):
         if index > 8:
@@ -102,6 +103,11 @@ def build_roster(kind, customer_name, exam_date, rows):
         sheet.cell(index, 6).number_format = "@"
         if kind == "chest" and item.get("asbestos"):
             sheet.cell(index, 7).value = "塵肺"
+        if index == 8:
+            sheet.cell(index, 9).value = '=IF(OR(F6+1=F8,F6="",F8=""),"","★")'
+        else:
+            previous = index - 1
+            sheet.cell(index, 9).value = f'=IF(OR(F{previous}+1=F{index},F{previous}="",F{index}=""),"","★")'
 
     sheet["F3"] = "=COUNTA($F$8:F1000)"
     if kind == "chest":
