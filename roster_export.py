@@ -83,6 +83,8 @@ def build_roster(kind, customer_name, exam_date, rows):
                 cell.value = None
 
     sheet.print_title_rows = "7:7"
+    last_print_row = max(8, 7 + len(rows))
+    sheet.print_area = f"$B$2:$G${last_print_row}"
     sheet.page_setup.paperSize = sheet.PAPERSIZE_A4
     sheet.page_setup.orientation = sheet.ORIENTATION_PORTRAIT
 

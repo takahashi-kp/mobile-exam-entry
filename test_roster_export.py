@@ -59,6 +59,7 @@ class RosterExportTests(unittest.TestCase):
 
         self.assertEqual([sheet[f"F{row}"].value for row in range(8, 11)], ["1", "2", "10"])
         self.assertEqual(sheet.print_title_rows, "$7:$7")
+        self.assertEqual(str(sheet.print_area), "'胸部'!$B$2:$G$10")
         self.assertEqual(sheet.page_setup.paperSize, 9)
         self.assertEqual(sheet.page_setup.orientation, "portrait")
         self.assertFalse(any(cell.comment for row in sheet.iter_rows() for cell in row))
