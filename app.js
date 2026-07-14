@@ -1,4 +1,4 @@
-import { evaluateGuidanceAge, formatJapaneseDate } from "./guidance.js?v=20260713-01";
+import { ageOnDate, evaluateGuidanceAge, formatJapaneseDate } from "./guidance.js?v=20260713-01";
 
 const DB_NAME = "mobile-exam-entry";
 const DEFAULT_CLOUD_URL = "https://mobile-exam-entry-b6w9-z574.onrender.com/api/exam-records";
@@ -190,7 +190,7 @@ const QUESTIONNAIRE_SECTIONS = [
 const PROGRESS_GROUPS = [
   { label: "便区分", target: "便区分", fields: ["便区分", "便区分_自由入力"] },
   { label: "視力", target: "視力", fields: ["視力右裸眼", "視力右矯正", "視力左裸眼", "視力左矯正", "視力_自由入力"] },
-  { label: "X線", target: "X線", fields: ["胸部X線フィルム番号", "胃部X線フィルム番号", "X線_自由入力"] },
+  { label: "X線", target: "X線", fields: ["胸部X線フィルム番号", "胃部X線フィルム番号", "塵肺・アスベスト", "X線_自由入力"] },
   { label: "食後", target: "食後", fields: ["空腹時間（時）", "空腹時間（分）", "食後時間_自由入力"] },
   { label: "尿", target: "尿", fields: ["尿蛋白定性", "尿糖定性", "尿潜血", "尿ウロビリノーゲン定性", "ケトン体（アセトン体）", "尿PH", "尿検査_自由入力"] },
   { label: "血圧", target: "血圧", fields: ["1回目最高血圧", "1回目最低血圧", "2回目最高血圧", "2回目最低血圧", "血圧_自由入力"] },
@@ -1387,6 +1387,7 @@ async function importScheduleCsv(event) {
       entityType: "schedule_group",
       id: crypto.randomUUID(),
       name: file.name.replace(/\.[^.]+$/, ""),
+      customerName: "",
       fileName: file.name,
       recordCount: 0,
       createdAt: now,
@@ -1493,7 +1494,8 @@ async function setActiveGroup(groupId) {
 
 function updateActiveGroupLabel() {
   if (!activeGroupLabel) return;
-  activeGroupLabel.textContent = activeGroup ? `予定グループ: ${activeGroup.name}` : "予定グループ未選択";
+  const customer = activeGroup?.customerName ? ` / 顧客: ${activeGroup.customerName}` : "";
+  activeGroupLabel.textContent = activeGroup ? `予定グループ: ${activeGroup.name}${customer}` : "予定グループ未選択";
   activeGroupLabel.classList.toggle("found", Boolean(activeGroup));
 }
 
@@ -1507,6 +1509,7 @@ async function refreshScheduleRows() {
     tr.className = active ? "is-active-row" : "";
     tr.innerHTML = `
       <td>${escapeHtml(group.name)}</td>
+      <td><input class="schedule-customer-input" data-customer-group-id="${group.id}" value="${escapeAttribute(group.customerName || "")}" placeholder="顧客名"></td>
       <td>${escapeHtml(group.fileName)}</td>
       <td>${escapeHtml(group.recordCount)}</td>
       <td>${formatDate(group.createdAt)}</td>
@@ -1514,6 +1517,9 @@ async function refreshScheduleRows() {
     `;
     scheduleRows.appendChild(tr);
   }
+  scheduleRows.querySelectorAll("[data-customer-group-id]").forEach((input) => {
+    input.addEventListener("change", () => saveScheduleCustomerName(input.dataset.customerGroupId, input.value));
+  });
   scheduleRows.querySelectorAll("[data-group-id]").forEach((button) => {
     button.addEventListener("click", async () => {
       if (!(await confirmSaveBeforeLeaving())) return;
@@ -1524,6 +1530,26 @@ async function refreshScheduleRows() {
       switchView("entry");
     });
   });
+}
+
+async function saveScheduleCustomerName(groupId, value) {
+  const group = await getOne(SCHEDULE_GROUPS, groupId);
+  if (!group) return;
+  const customerName = String(value || "").trim();
+  const updated = {
+    ...group,
+    customerName,
+    updatedAt: new Date().toISOString(),
+    syncState: "pending",
+    lastSyncError: ""
+  };
+  await put(SCHEDULE_GROUPS, updated);
+  if (activeGroup?.id === groupId) {
+    activeGroup = updated;
+    updateActiveGroupLabel();
+  }
+  if (navigator.onLine) await syncPending();
+  toast("顧客名を保存しました");
 }
 
 async function getPlannedPatient(code) {
@@ -1538,13 +1564,7 @@ async function updatePatientSummary() {
   if (!patient) {
     const data = formToRecord();
     if (data["氏名"] || data["カナ氏名"] || data["生年月日"]) {
-      patientSummary.innerHTML = `
-        <span class="patient-name-lines">
-          <span class="patient-kana">${escapeHtml(data["カナ氏名"] || "")}</span>
-          <span class="patient-name">${escapeHtml(data["氏名"] || "")}</span>
-        </span>
-        <span class="patient-meta">${escapeHtml(data["生年月日"] || "")}</span>
-      `;
+      patientSummary.innerHTML = formatPatientSummary(data);
       patientSummary.classList.add("found");
       return;
     }
@@ -1552,14 +1572,20 @@ async function updatePatientSummary() {
     patientSummary.classList.toggle("found", Boolean(data["個人番号"]));
     return;
   }
-  patientSummary.innerHTML = `
-    <span class="patient-name-lines">
-      <span class="patient-kana">${escapeHtml(patient["カナ氏名"] || "")}</span>
-      <span class="patient-name">${escapeHtml(patient["氏名"] || "")}</span>
-    </span>
-    <span class="patient-meta">${escapeHtml(patient["性別名称"] || "")}　${escapeHtml(patient["生年月日"] || "")}</span>
-  `;
+  patientSummary.innerHTML = formatPatientSummary(patient);
   patientSummary.classList.add("found");
+}
+
+function formatPatientSummary(data) {
+  const birthDate = parseGuidanceDate(data["生年月日"] || "");
+  const age = birthDate ? ageOnDate(birthDate, new Date()) : null;
+  return `
+    <span class="patient-name-lines">
+      <span class="patient-kana">${escapeHtml(data["カナ氏名"] || "")}</span>
+      <span class="patient-name">${escapeHtml(data["氏名"] || "")}</span>
+    </span>
+    <span class="patient-meta">${escapeHtml(data["性別名称"] || "")}　${age == null ? "年齢不明" : `${age}歳`}　${escapeHtml(data["生年月日"] || "")}</span>
+  `;
 }
 
 function formatFasting(data) {

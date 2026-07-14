@@ -313,8 +313,12 @@ textarea:focus {
 .id-row {
   align-items: end;
   column-gap: 12px;
-  grid-template-columns: max-content max-content max-content max-content max-content minmax(220px, 1fr);
+  grid-template-columns: minmax(320px, 1fr) max-content max-content max-content max-content max-content max-content;
   justify-content: start;
+}
+
+.reception-field {
+  margin-right: -8px;
 }
 
 .short-field {
@@ -380,6 +384,12 @@ textarea:focus {
 .patient-summary.found {
   background: var(--soft);
   color: var(--ink);
+}
+
+.xray-asbestos-line {
+  grid-template-columns: max-content max-content;
+  justify-content: start;
+  margin-top: 12px;
 }
 
 .active-group-label {
@@ -595,7 +605,12 @@ table {
 }
 
 .schedule-table {
-  min-width: 760px;
+  min-width: 900px;
+}
+
+.schedule-customer-input {
+  min-width: 180px;
+  width: 100%;
 }
 
 th,
