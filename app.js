@@ -210,6 +210,7 @@ const recordRows = document.querySelector("#recordRows");
 const scheduleRows = document.querySelector("#scheduleRows");
 const searchRecords = document.querySelector("#searchRecords");
 const syncMessage = document.querySelector("#syncMessage");
+const appToast = document.querySelector("#appToast");
 const cleanupSummary = document.querySelector("#cleanupSummary");
 const guidanceFields = {
   year: document.querySelector("#guidanceYear"),
@@ -2006,7 +2007,10 @@ async function exportRosters() {
     toast("予定管理で顧客名を入力してください", true);
     return;
   }
-  if (!(await confirmSaveBeforeLeaving())) return;
+  if (isDirty && hasCurrentInput()) {
+    toast("未保存の入力があります。先に保存してから連名簿を出力してください", true);
+    return;
+  }
   if (!navigator.onLine) {
     toast("連名簿の作成にはオンライン接続が必要です", true);
     return;
@@ -2018,6 +2022,7 @@ async function exportRosters() {
       directoryHandle = await window.showDirectoryPicker({ mode: "readwrite" });
     } catch (error) {
       if (error?.name === "AbortError") return;
+      directoryHandle = null;
     }
   }
 
@@ -2025,6 +2030,7 @@ async function exportRosters() {
   const button = document.querySelector("#exportRosters");
   if (button) button.disabled = true;
   try {
+    toast("連名簿を作成しています…");
     await syncAndRefresh({ force: true });
     const rows = await getActiveRows();
     const examDate = new Date();
@@ -2169,4 +2175,10 @@ function escapeHtml(value) {
 function toast(message, isError = false) {
   syncMessage.textContent = message;
   syncMessage.style.background = isError ? "var(--bad)" : "var(--soft)";
+  if (!appToast) return;
+  appToast.textContent = message;
+  appToast.classList.toggle("error", isError);
+  appToast.classList.add("visible");
+  window.clearTimeout(toast.hideTimer);
+  toast.hideTimer = window.setTimeout(() => appToast.classList.remove("visible"), isError ? 7000 : 4000);
 }
