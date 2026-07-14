@@ -5,8 +5,10 @@ from pathlib import Path
 
 import psycopg
 from psycopg.types.json import Jsonb
-from flask import Flask, Response, jsonify, request, send_from_directory
+from flask import Flask, Response, jsonify, request, send_file, send_from_directory
 from psycopg.rows import dict_row
+
+from roster_export import build_roster
 
 ROOT = Path(__file__).resolve().parent
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
@@ -186,6 +188,30 @@ def merge_payload(existing, incoming):
 @app.route("/healthz")
 def healthz():
     return json_response({"ok": True, "databaseConfigured": bool(DATABASE_URL), "syncSchema": 2})
+
+
+@app.route("/api/roster-export", methods=["POST"])
+def export_roster():
+    if not check_auth():
+        return json_response({"error": "Unauthorized"}, 401)
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return json_response({"error": "JSON object is required"}, 400)
+    kind = str(payload.get("kind") or "")
+    rows = payload.get("rows")
+    if kind not in {"chest", "stomach"}:
+        return json_response({"error": "kind must be chest or stomach"}, 400)
+    try:
+        output = build_roster(kind, payload.get("customerName"), payload.get("examDate"), rows)
+    except ValueError as error:
+        return json_response({"error": str(error)}, 400)
+    label = "胸部XP" if kind == "chest" else "胃部XP"
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name=f"【{label}】巡回照射録.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
 
 
 @app.route("/")

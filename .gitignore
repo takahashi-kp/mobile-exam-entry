@@ -4,3 +4,6 @@ server.err.log
 server.out.log
 .DS_Store
 Thumbs.db
+node_modules
+work/
+*.inspect.ndjson

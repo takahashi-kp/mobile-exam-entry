@@ -18,7 +18,7 @@ class MergePayloadTests(unittest.TestCase):
         guidance = client.get("/guidance.js")
 
         self.assertEqual(index.status_code, 200)
-        self.assertIn(b"app.js?v=20260714-01", index.data)
+        self.assertIn(b"app.js?v=20260714-02", index.data)
         self.assertIn("塵肺・アスベスト".encode(), index.data)
         self.assertIn("顧客名".encode(), index.data)
         self.assertEqual(script.status_code, 200)
@@ -28,6 +28,22 @@ class MergePayloadTests(unittest.TestCase):
         index.close()
         script.close()
         guidance.close()
+
+    def test_roster_export_endpoint_returns_xlsx(self):
+        response = app.test_client().post(
+            "/api/roster-export",
+            json={
+                "kind": "chest",
+                "customerName": "テスト顧客",
+                "examDate": "2026-07-14",
+                "rows": [{"nameKana": "ヤマダ タロウ", "sex": "男性", "age": 52, "filmNumber": "00123", "asbestos": True}],
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.mimetype, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        self.assertGreater(len(response.data), 1000)
+        response.close()
 
     def test_different_exam_fields_are_combined(self):
         existing = {"entityType": "exam_group_value", "values": {"身長": "170.0", "体重": ""}}

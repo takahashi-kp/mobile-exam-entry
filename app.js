@@ -238,6 +238,7 @@ let personalValueBeforeEdit = "";
 let syncInProgress = false;
 let pullInProgress = false;
 let lastAutomaticRefreshAt = 0;
+let rosterExportInProgress = false;
 const questionnaireChoiceState = new WeakMap();
 
 init();
@@ -481,6 +482,7 @@ function bindUi() {
     }
   });
   document.querySelector("#exportCsv").addEventListener("click", exportCsv);
+  document.querySelector("#exportRosters")?.addEventListener("click", exportRosters);
   document.querySelector("#openAllGroups").addEventListener("click", () => setAllGroupsCollapsed(false));
   document.querySelector("#closeAllGroups").addEventListener("click", () => setAllGroupsCollapsed(true));
   document.querySelector("#scheduleCsv").addEventListener("change", importScheduleCsv);
@@ -1992,6 +1994,116 @@ async function exportCsv() {
   link.download = `出張健診_${activeGroup?.name || "全体"}_${new Date().toISOString().slice(0, 10)}.csv`;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+async function exportRosters() {
+  if (rosterExportInProgress) return;
+  if (!activeGroup) {
+    toast("予定管理で出力するグループを選択してください", true);
+    return;
+  }
+  if (!activeGroup.customerName) {
+    toast("予定管理で顧客名を入力してください", true);
+    return;
+  }
+  if (!(await confirmSaveBeforeLeaving())) return;
+  if (!navigator.onLine) {
+    toast("連名簿の作成にはオンライン接続が必要です", true);
+    return;
+  }
+
+  let directoryHandle = null;
+  if (window.showDirectoryPicker) {
+    try {
+      directoryHandle = await window.showDirectoryPicker({ mode: "readwrite" });
+    } catch (error) {
+      if (error?.name === "AbortError") return;
+    }
+  }
+
+  rosterExportInProgress = true;
+  const button = document.querySelector("#exportRosters");
+  if (button) button.disabled = true;
+  try {
+    await syncAndRefresh({ force: true });
+    const rows = await getActiveRows();
+    const examDate = new Date();
+    const common = rows.map(({ data }) => {
+      const birthDate = parseGuidanceDate(data["生年月日"] || "");
+      return {
+        name: data["氏名"] || "",
+        nameKana: data["カナ氏名"] || "",
+        sex: data["性別名称"] || "",
+        age: birthDate ? ageOnDate(birthDate, examDate) : "",
+        asbestos: Boolean(data["塵肺・アスベスト"])
+      };
+    });
+    const exports = [
+      {
+        kind: "chest",
+        fileName: "【胸部XP】巡回照射録.xlsx",
+        rows: common.map((item, index) => ({ ...item, filmNumber: rows[index].data["胸部X線フィルム番号"] || "" })).filter((item) => item.filmNumber)
+      },
+      {
+        kind: "stomach",
+        fileName: "【胃部XP】巡回照射録.xlsx",
+        rows: common.map((item, index) => ({ ...item, filmNumber: rows[index].data["胃部X線フィルム番号"] || "" })).filter((item) => item.filmNumber)
+      }
+    ];
+    const settings = await getCloudSettings();
+    for (const item of exports) {
+      const response = await fetch("/api/roster-export", {
+        method: "POST",
+        headers: cloudHeaders(settings),
+        body: JSON.stringify({
+          kind: item.kind,
+          customerName: activeGroup.customerName,
+          examDate: localIsoDate(examDate),
+          rows: item.rows
+        })
+      });
+      if (!response.ok) {
+        let detail = `HTTP ${response.status}`;
+        try {
+          detail = (await response.json()).error || detail;
+        } catch (_) {
+          // Keep the HTTP status when the response is not JSON.
+        }
+        throw new Error(detail);
+      }
+      const blob = await response.blob();
+      if (directoryHandle) {
+        const fileHandle = await directoryHandle.getFileHandle(item.fileName, { create: true });
+        const writable = await fileHandle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+      } else {
+        downloadBlob(blob, item.fileName);
+      }
+    }
+    toast(`胸部${exports[0].rows.length}件・胃部${exports[1].rows.length}件の連名簿を保存しました`);
+  } catch (error) {
+    toast(`連名簿の出力に失敗しました: ${error.message}`, true);
+  } finally {
+    rosterExportInProgress = false;
+    if (button) button.disabled = false;
+  }
+}
+
+function localIsoDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function downloadBlob(blob, fileName) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 async function getQuestionnairesByPatient() {
