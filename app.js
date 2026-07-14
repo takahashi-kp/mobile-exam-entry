@@ -2042,7 +2042,7 @@ async function exportRosters() {
       {
         kind: "chest",
         fileName: "【胸部XP】巡回照射録.xlsx",
-        rows: common.map((item, index) => ({ ...item, filmNumber: rows[index].data["胸部X線フィルム番号"] || "" })).filter((item) => item.filmNumber)
+        rows: common.map((item, index) => ({ ...item, filmNumber: rows[index].data["胸部X線フィルム番号"] || "" })).filter((item) => item.filmNumber || item.asbestos)
       },
       {
         kind: "stomach",
