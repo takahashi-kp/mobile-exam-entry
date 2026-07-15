@@ -1,9 +1,9 @@
-const CACHE = "mobile-exam-entry-v52";
+const CACHE = "mobile-exam-entry-v53";
 const ASSETS = [
   "./",
   "./index.html",
-  "./styles.css?v=20260714-06",
-  "./app.js?v=20260714-06",
+  "./styles.css?v=20260715-01",
+  "./app.js?v=20260715-01",
   "./guidance.js?v=20260713-01",
   "./manifest.webmanifest"
 ];

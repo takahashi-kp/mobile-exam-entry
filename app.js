@@ -2024,7 +2024,7 @@ async function exportRosters() {
   if (!window.confirm(`予定グループ「${activeGroup.name}」の胸部・胃部連名簿を出力しますか？`)) return;
 
   let directoryHandle = null;
-  if (window.showDirectoryPicker) {
+  if (window.showDirectoryPicker && !isWindowsDevice()) {
     try {
       directoryHandle = await window.showDirectoryPicker({ mode: "readwrite" });
     } catch (error) {
@@ -2110,12 +2110,20 @@ function localIsoDate(date) {
   return `${year}-${month}-${day}`;
 }
 
+function isWindowsDevice() {
+  const platform = navigator.userAgentData?.platform || navigator.platform || navigator.userAgent || "";
+  return /win/i.test(platform);
+}
+
 function downloadBlob(blob, fileName) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
   link.download = fileName;
+  link.hidden = true;
+  document.body.appendChild(link);
   link.click();
+  link.remove();
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
