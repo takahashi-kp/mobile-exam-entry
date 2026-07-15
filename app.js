@@ -192,7 +192,7 @@ const QUESTIONNAIRE_SECTIONS = [
 const PROGRESS_GROUPS = [
   { label: "便区分", target: "便区分", fields: ["便区分", "便区分_自由入力"] },
   { label: "視力", target: "視力", fields: ["視力右裸眼", "視力右矯正", "視力左裸眼", "視力左矯正", "視力_自由入力"] },
-  { label: "X線", target: "X線", fields: ["胸部X線フィルム番号", "胃部X線フィルム番号", "塵肺・アスベスト", "X線_自由入力"] },
+  { label: "X線", target: "X線", fields: ["胸部X線フィルム番号", "胃部X線フィルム番号", "塵肺", "アスベスト", "塵肺・アスベスト", "X線_自由入力"] },
   { label: "食後", target: "食後", fields: ["空腹時間（時）", "空腹時間（分）", "食後時間_自由入力"] },
   { label: "尿", target: "尿", fields: ["尿蛋白定性", "尿糖定性", "尿潜血", "尿ウロビリノーゲン定性", "ケトン体（アセトン体）", "尿PH", "尿検査_自由入力"] },
   { label: "血圧", target: "血圧", fields: ["1回目最高血圧", "1回目最低血圧", "2回目最高血圧", "2回目最低血圧", "血圧_自由入力"] },
@@ -1049,7 +1049,7 @@ async function saveGroupValues(record, data, now) {
   const existingByGroup = new Map(existingValues.map((item) => [item.groupKey, item]));
   for (const group of PROGRESS_GROUPS) {
     const values = pickFields(data, group.fields);
-    const hasValue = Object.values(values).some((value) => String(value || "").trim());
+    const hasValue = Object.values(values).some((value) => value !== false && String(value || "").trim());
     const existing = existingByGroup.get(group.target);
     if (!hasValue && !existing) continue;
     const patientKey = recordPatientKey(record);
@@ -1076,7 +1076,7 @@ async function saveGroupValues(record, data, now) {
 async function saveProgressSummary(record, data, now) {
   const progress = {};
   for (const group of PROGRESS_GROUPS) {
-    progress[group.target] = group.fields.some((field) => String(data[field] || "").trim()) ? "済" : "未";
+    progress[group.target] = group.fields.some((field) => data[field] !== false && String(data[field] || "").trim()) ? "済" : "未";
   }
   await put(PROGRESS_SUMMARIES, {
     id: `progress::${recordPatientKey(record)}`,
@@ -1093,7 +1093,7 @@ async function saveProgressSummary(record, data, now) {
 }
 
 function pickFields(data, fields) {
-  return Object.fromEntries(fields.map((field) => [field, data[field] || ""]));
+  return Object.fromEntries(fields.map((field) => [field, data[field] ?? ""]));
 }
 
 function stableRecordId(scheduleGroupId, patientCode) {
@@ -1129,7 +1129,11 @@ function formToRecord() {
   Array.from(form.elements).forEach((field) => {
     if (!field.name) return;
     if (field.type === "checkbox") {
-      if (field.checked) data[field.name] = field.value;
+      if (["塵肺", "アスベスト"].includes(field.name)) {
+        data[field.name] = field.checked ? field.value : false;
+      } else if (field.checked) {
+        data[field.name] = field.value;
+      }
       return;
     }
     data[field.name] = field.value.trim();
@@ -2042,7 +2046,12 @@ async function exportRosters() {
     toast("予定管理で予定日を入力してください", true);
     return;
   }
-  if (!window.confirm(`予定グループ「${activeGroup.name}」の胸部・胃部連名簿を出力しますか？`)) return;
+  const createChest = window.confirm("胸部連名簿を作成しますか？");
+  const createStomach = window.confirm("胃部連名簿を作成しますか？");
+  if (!createChest && !createStomach) {
+    toast("連名簿の作成をキャンセルしました");
+    return;
+  }
 
   let directoryHandle = null;
   if (window.showDirectoryPicker && !isWindowsDevice()) {
@@ -2070,21 +2079,27 @@ async function exportRosters() {
         nameKana: data["カナ氏名"] || "",
         sex: data["性別名称"] || "",
         age: birthDate ? ageOnDate(birthDate, examDate) : "",
-        asbestos: Boolean(data["塵肺・アスベスト"])
+        pneumoconiosis: Boolean(data["塵肺"]),
+        asbestos: Boolean(data["アスベスト"]),
+        legacyDust: Boolean(data["塵肺・アスベスト"])
       };
     });
     const exports = [
       {
         kind: "chest",
+        label: "胸部",
+        enabled: createChest,
         fileName: "【胸部XP】巡回照射録.xlsx",
-        rows: common.map((item, index) => ({ ...item, filmNumber: rows[index].data["胸部X線フィルム番号"] || "" })).filter((item) => item.filmNumber || item.asbestos)
+        rows: common.map((item, index) => ({ ...item, filmNumber: rows[index].data["胸部X線フィルム番号"] || "" })).filter((item) => item.filmNumber || item.pneumoconiosis || item.asbestos || item.legacyDust)
       },
       {
         kind: "stomach",
+        label: "胃部",
+        enabled: createStomach,
         fileName: "【胃部XP】巡回照射録.xlsx",
         rows: common.map((item, index) => ({ ...item, filmNumber: rows[index].data["胃部X線フィルム番号"] || "" })).filter((item) => item.filmNumber)
       }
-    ];
+    ].filter((item) => item.enabled);
     const settings = await getCloudSettings();
     for (const item of exports) {
       const response = await fetch("/api/roster-export", {
@@ -2116,7 +2131,7 @@ async function exportRosters() {
         downloadBlob(blob, item.fileName);
       }
     }
-    toast(`胸部${exports[0].rows.length}件・胃部${exports[1].rows.length}件の連名簿を保存しました`);
+    toast(`${exports.map((item) => `${item.label}${item.rows.length}件`).join("・")}の連名簿を保存しました`);
   } catch (error) {
     toast(`連名簿の出力に失敗しました: ${error.message}`, true);
   } finally {

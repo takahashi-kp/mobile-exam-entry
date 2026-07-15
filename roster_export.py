@@ -86,6 +86,17 @@ def film_number_sort_key(item):
     return (not bool(value), natural)
 
 
+def dust_label(item):
+    if item.get("legacyDust") or (item.get("asbestos") and "pneumoconiosis" not in item):
+        return "塵肺"
+    labels = []
+    if item.get("pneumoconiosis"):
+        labels.append("塵肺")
+    if item.get("asbestos"):
+        labels.append("アスベスト")
+    return "・".join(labels)
+
+
 def build_roster(kind, customer_name, exam_date, rows):
     if kind not in TEMPLATES:
         raise ValueError("Unknown roster type")
@@ -113,6 +124,8 @@ def build_roster(kind, customer_name, exam_date, rows):
     sheet.print_area = f"$B$2:$G${last_print_row}"
     sheet.page_setup.paperSize = sheet.PAPERSIZE_A4
     sheet.page_setup.orientation = sheet.ORIENTATION_PORTRAIT
+    if kind == "chest":
+        sheet.column_dimensions["G"].width = 18
 
     for row_number in range(8, 1001):
         for col in range(3, 8):
@@ -128,8 +141,8 @@ def build_roster(kind, customer_name, exam_date, rows):
         film_number = safe_film_number(item.get("filmNumber"))
         sheet.cell(index, 6).value = film_number
         sheet.cell(index, 6).number_format = "0" if isinstance(film_number, int) else "@"
-        if kind == "chest" and item.get("asbestos"):
-            sheet.cell(index, 7).value = "塵肺"
+        if kind == "chest":
+            sheet.cell(index, 7).value = dust_label(item) or None
         if index == 8:
             sheet.cell(index, 9).value = '=IF(OR(F6+1=F8,F6="",F8=""),"","★")'
         else:
@@ -138,7 +151,7 @@ def build_roster(kind, customer_name, exam_date, rows):
 
     sheet["F3"] = "=COUNTA($F$8:F1000)"
     if kind == "chest":
-        sheet["F2"] = '=COUNTIF($G$8:G1000,"塵肺")'
+        sheet["F2"] = "=COUNTA($G$8:G1000)"
     if workbook.calculation:
         workbook.calculation.fullCalcOnLoad = True
         workbook.calculation.forceFullCalc = True

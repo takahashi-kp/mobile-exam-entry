@@ -18,16 +18,19 @@ class MergePayloadTests(unittest.TestCase):
         guidance = client.get("/guidance.js")
 
         self.assertEqual(index.status_code, 200)
-        self.assertIn(b"app.js?v=20260715-02", index.data)
+        self.assertIn(b"app.js?v=20260715-03", index.data)
         self.assertIn(b'id="appToast"', index.data)
         self.assertIn(b'id="downloadScheduleFormat"', index.data)
         self.assertIn("予定日".encode(), index.data)
-        self.assertIn("塵肺・アスベスト".encode(), index.data)
+        self.assertIn('name="塵肺"'.encode(), index.data)
+        self.assertIn('name="アスベスト"'.encode(), index.data)
         self.assertIn("顧客名".encode(), index.data)
         self.assertEqual(script.status_code, 200)
         self.assertIn(b"syncSchemaV2Reseeded", script.data)
         self.assertIn(b"isWindowsDevice", script.data)
         self.assertIn(b"document.body.appendChild(link)", script.data)
+        self.assertIn("胸部連名簿を作成しますか？".encode(), script.data)
+        self.assertIn("胃部連名簿を作成しますか？".encode(), script.data)
         self.assertEqual(guidance.status_code, 200)
         self.assertIn(b"evaluateGuidanceAge", guidance.data)
         index.close()
@@ -90,6 +93,14 @@ class MergePayloadTests(unittest.TestCase):
         merged = merge_payload(existing, incoming)
 
         self.assertEqual(merged["scheduledDate"], "")
+
+    def test_false_checkbox_value_clears_previous_check(self):
+        existing = {"entityType": "exam_group_value", "values": {"塵肺": "該当"}}
+        incoming = {"entityType": "exam_group_value", "values": {"塵肺": False}}
+
+        merged = merge_payload(existing, incoming)
+
+        self.assertIs(merged["values"]["塵肺"], False)
 
 
 if __name__ == "__main__":

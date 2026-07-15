@@ -19,7 +19,7 @@ class RosterExportTests(unittest.TestCase):
 
         self.assertEqual(sheet["C4"].value, "テスト顧客")
         self.assertEqual(sheet["E4"].value, "2026年7月14日")
-        self.assertEqual(sheet["F2"].value, '=COUNTIF($G$8:G1000,"塵肺")')
+        self.assertEqual(sheet["F2"].value, "=COUNTA($G$8:G1000)")
         self.assertEqual(sheet["F3"].value, "=COUNTA($F$8:F1000)")
         self.assertEqual(sheet["C8"].value, "ヤマダ タロウ")
         self.assertEqual(sheet["F8"].value, 123)
@@ -37,6 +37,19 @@ class RosterExportTests(unittest.TestCase):
         self.assertEqual(sheet["F8"].value, 123)
         self.assertIsNone(sheet["G8"].value)
         self.assertEqual([str(item.sqref) for item in sheet.conditional_formatting], ["B8:H1000", "F8:F1000"])
+
+    def test_chest_roster_distinguishes_dust_categories(self):
+        rows = [
+            {"filmNumber": "1", "pneumoconiosis": True, "asbestos": False},
+            {"filmNumber": "2", "pneumoconiosis": False, "asbestos": True},
+            {"filmNumber": "3", "pneumoconiosis": True, "asbestos": True},
+        ]
+
+        output = build_roster("chest", "", "2026-07-15", rows)
+        sheet = load_workbook(output, data_only=False).active
+
+        self.assertEqual([sheet[f"G{row}"].value for row in range(8, 11)], ["塵肺", "アスベスト", "塵肺・アスベスト"])
+        self.assertEqual(sheet.column_dimensions["G"].width, 18)
 
     def test_row_limit_is_enforced(self):
         with self.assertRaises(ValueError):

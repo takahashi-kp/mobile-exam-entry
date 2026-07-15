@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#176c6a">
   <title>出張健診 検査項目入力</title>
   <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="stylesheet" href="./styles.css?v=20260715-02">
+  <link rel="stylesheet" href="./styles.css?v=20260715-03">
 </head>
 <body>
   <div class="app-toast" id="appToast" role="status" aria-live="polite"></div>
@@ -138,8 +138,9 @@
               </label>
             </div>
             <div class="choice-line xray-asbestos-line">
-              <span class="field-title">塵肺・アスベスト</span>
-              <label class="choice"><input type="checkbox" name="塵肺・アスベスト" value="該当">該当</label>
+              <span class="field-title">X線区分</span>
+              <label class="choice"><input type="checkbox" name="塵肺" value="該当">塵肺</label>
+              <label class="choice"><input type="checkbox" name="アスベスト" value="該当">アスベスト</label>
             </div>
             <label class="group-note">
               <span>自由入力</span>
@@ -467,6 +468,6 @@
     </section>
   </main>
 
-  <script src="./app.js?v=20260715-02" type="module"></script>
+  <script src="./app.js?v=20260715-03" type="module"></script>
 </body>
 </html>

@@ -416,7 +416,7 @@ textarea:focus {
 }
 
 .xray-asbestos-line {
-  grid-template-columns: max-content max-content;
+  grid-template-columns: max-content max-content max-content;
   justify-content: start;
   margin-top: 12px;
 }
