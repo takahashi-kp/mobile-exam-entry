@@ -27,6 +27,7 @@ class RosterExportTests(unittest.TestCase):
         self.assertEqual(sheet["F8"].number_format, "0")
         self.assertEqual(sheet["G8"].value, "塵肺")
         self.assertIsNone(sheet["G9"].value)
+        self.assertEqual([str(item.sqref) for item in sheet.conditional_formatting], ["B8:H1000", "F8:F1000"])
 
     def test_stomach_roster_has_no_asbestos_column_value(self):
         output = build_roster("stomach", "テスト顧客", "2026-07-14", SAMPLE_ROWS)
@@ -35,6 +36,7 @@ class RosterExportTests(unittest.TestCase):
         self.assertEqual(sheet.title, "胃部")
         self.assertEqual(sheet["F8"].value, 123)
         self.assertIsNone(sheet["G8"].value)
+        self.assertEqual([str(item.sqref) for item in sheet.conditional_formatting], ["B8:H1000", "F8:F1000"])
 
     def test_row_limit_is_enforced(self):
         with self.assertRaises(ValueError):

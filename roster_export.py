@@ -5,6 +5,7 @@ from pathlib import Path
 import re
 
 from openpyxl import load_workbook
+from openpyxl.formatting.formatting import ConditionalFormattingList
 
 
 ROOT = Path(__file__).resolve().parent
@@ -13,6 +14,10 @@ TEMPLATES = {
     "stomach": ROOT / "templates" / "stomach-roster.xlsx",
 }
 MAX_ROSTER_ROWS = 993  # Template detail rows 8 through 1000.
+CONDITIONAL_FORMAT_RANGES = {
+    "B8:H1048576": "B8:H1000",
+    "F8:F1048576": "F8:F1000",
+}
 
 
 def japanese_date(value):
@@ -63,6 +68,17 @@ def copy_row_style(sheet, source_row, target_row, min_col=3, max_col=7):
         target.protection = copy(source.protection)
 
 
+def limit_conditional_formatting_ranges(sheet):
+    entries = [
+        (CONDITIONAL_FORMAT_RANGES.get(str(item.sqref), str(item.sqref)), list(item.rules))
+        for item in sheet.conditional_formatting
+    ]
+    sheet.conditional_formatting = ConditionalFormattingList()
+    for cell_range, rules in entries:
+        for rule in rules:
+            sheet.conditional_formatting.add(cell_range, copy(rule))
+
+
 def film_number_sort_key(item):
     value = str(item.get("filmNumber") or "").strip()
     parts = re.split(r"(\d+)", value.casefold())
@@ -81,6 +97,7 @@ def build_roster(kind, customer_name, exam_date, rows):
     workbook = load_workbook(TEMPLATES[kind])
     sheet = workbook.active
     rows = sorted(rows, key=film_number_sort_key)
+    limit_conditional_formatting_ranges(sheet)
     sheet["C4"] = safe_text(customer_name, 100)
     sheet["E4"] = japanese_date(exam_date)
 
