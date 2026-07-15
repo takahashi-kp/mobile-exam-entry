@@ -43,6 +43,15 @@ def safe_age(value):
     return age if 0 <= age <= 130 else ""
 
 
+def safe_film_number(value):
+    text = str(value or "").strip()
+    if re.fullmatch(r"\d+", text):
+        number = int(text)
+        if number <= 999_999_999_999_999:
+            return number
+    return safe_text(text, 40)
+
+
 def copy_row_style(sheet, source_row, target_row, min_col=3, max_col=7):
     for col in range(min_col, max_col + 1):
         source = sheet.cell(source_row, col)
@@ -99,8 +108,9 @@ def build_roster(kind, customer_name, exam_date, rows):
         sheet.cell(index, 3).value = safe_text(item.get("nameKana") or item.get("name"), 120)
         sheet.cell(index, 4).value = safe_text(item.get("sex"), 20)
         sheet.cell(index, 5).value = safe_age(item.get("age"))
-        sheet.cell(index, 6).value = safe_text(item.get("filmNumber"), 40)
-        sheet.cell(index, 6).number_format = "@"
+        film_number = safe_film_number(item.get("filmNumber"))
+        sheet.cell(index, 6).value = film_number
+        sheet.cell(index, 6).number_format = "0" if isinstance(film_number, int) else "@"
         if kind == "chest" and item.get("asbestos"):
             sheet.cell(index, 7).value = "塵肺"
         if index == 8:

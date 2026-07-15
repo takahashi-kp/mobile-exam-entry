@@ -22,8 +22,9 @@ class RosterExportTests(unittest.TestCase):
         self.assertEqual(sheet["F2"].value, '=COUNTIF($G$8:G1000,"塵肺")')
         self.assertEqual(sheet["F3"].value, "=COUNTA($F$8:F1000)")
         self.assertEqual(sheet["C8"].value, "ヤマダ タロウ")
-        self.assertEqual(sheet["F8"].value, "00123")
-        self.assertEqual(sheet["F8"].number_format, "@")
+        self.assertEqual(sheet["F8"].value, 123)
+        self.assertEqual(sheet["F8"].data_type, "n")
+        self.assertEqual(sheet["F8"].number_format, "0")
         self.assertEqual(sheet["G8"].value, "塵肺")
         self.assertIsNone(sheet["G9"].value)
 
@@ -32,7 +33,7 @@ class RosterExportTests(unittest.TestCase):
         sheet = load_workbook(output, data_only=False).active
 
         self.assertEqual(sheet.title, "胃部")
-        self.assertEqual(sheet["F8"].value, "00123")
+        self.assertEqual(sheet["F8"].value, 123)
         self.assertIsNone(sheet["G8"].value)
 
     def test_row_limit_is_enforced(self):
@@ -58,7 +59,7 @@ class RosterExportTests(unittest.TestCase):
         output = build_roster("chest", "", "2026-07-14", rows)
         sheet = load_workbook(output, data_only=False).active
 
-        self.assertEqual([sheet[f"F{row}"].value for row in range(8, 12)], ["1", "2", "4", "10"])
+        self.assertEqual([sheet[f"F{row}"].value for row in range(8, 12)], [1, 2, 4, 10])
         self.assertEqual(sheet["I8"].value, '=IF(OR(F6+1=F8,F6="",F8=""),"","★")')
         self.assertEqual(sheet["I11"].value, '=IF(OR(F10+1=F11,F10="",F11=""),"","★")')
         self.assertIsNone(sheet["I12"].value)
