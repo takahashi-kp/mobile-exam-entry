@@ -87,14 +87,16 @@ def film_number_sort_key(item):
 
 
 def dust_label(item):
-    if item.get("legacyDust") or (item.get("asbestos") and "pneumoconiosis" not in item):
+    if "pneumoconiosis" in item:
+        labels = []
+        if item.get("pneumoconiosis"):
+            labels.append("塵肺")
+        if item.get("asbestos"):
+            labels.append("アスベスト")
+        return "・".join(labels)
+    if item.get("legacyDust") or item.get("asbestos"):
         return "塵肺"
-    labels = []
-    if item.get("pneumoconiosis"):
-        labels.append("塵肺")
-    if item.get("asbestos"):
-        labels.append("アスベスト")
-    return "・".join(labels)
+    return ""
 
 
 def build_roster(kind, customer_name, exam_date, rows):

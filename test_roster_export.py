@@ -42,13 +42,15 @@ class RosterExportTests(unittest.TestCase):
         rows = [
             {"filmNumber": "1", "pneumoconiosis": True, "asbestos": False},
             {"filmNumber": "2", "pneumoconiosis": False, "asbestos": True},
-            {"filmNumber": "3", "pneumoconiosis": True, "asbestos": True},
+            {"filmNumber": "3", "pneumoconiosis": True, "asbestos": True, "legacyDust": True},
+            {"filmNumber": "4", "pneumoconiosis": False, "asbestos": False, "legacyDust": True},
         ]
 
         output = build_roster("chest", "", "2026-07-15", rows)
         sheet = load_workbook(output, data_only=False).active
 
         self.assertEqual([sheet[f"G{row}"].value for row in range(8, 11)], ["塵肺", "アスベスト", "塵肺・アスベスト"])
+        self.assertIsNone(sheet["G11"].value)
         self.assertEqual(sheet.column_dimensions["G"].width, 18)
 
     def test_row_limit_is_enforced(self):
