@@ -642,6 +642,10 @@ table {
   width: 100%;
 }
 
+.schedule-date-input {
+  min-width: 145px;
+}
+
 th,
 td {
   border-bottom: 1px solid var(--line);

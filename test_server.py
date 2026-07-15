@@ -18,8 +18,10 @@ class MergePayloadTests(unittest.TestCase):
         guidance = client.get("/guidance.js")
 
         self.assertEqual(index.status_code, 200)
-        self.assertIn(b"app.js?v=20260715-01", index.data)
+        self.assertIn(b"app.js?v=20260715-02", index.data)
         self.assertIn(b'id="appToast"', index.data)
+        self.assertIn(b'id="downloadScheduleFormat"', index.data)
+        self.assertIn("予定日".encode(), index.data)
         self.assertIn("塵肺・アスベスト".encode(), index.data)
         self.assertIn("顧客名".encode(), index.data)
         self.assertEqual(script.status_code, 200)
@@ -80,6 +82,14 @@ class MergePayloadTests(unittest.TestCase):
         merged = merge_payload(existing, incoming)
 
         self.assertEqual(merged["customerName"], "")
+
+    def test_empty_scheduled_date_removes_previous_date(self):
+        existing = {"entityType": "schedule_group", "scheduledDate": "2026-07-15"}
+        incoming = {"entityType": "schedule_group", "scheduledDate": ""}
+
+        merged = merge_payload(existing, incoming)
+
+        self.assertEqual(merged["scheduledDate"], "")
 
 
 if __name__ == "__main__":

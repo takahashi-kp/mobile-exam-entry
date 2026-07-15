@@ -6,6 +6,8 @@ const STORE = "records";
 const SETTINGS = "settings";
 const SCHEDULE_GROUPS = "scheduleGroups";
 const SCHEDULE_PATIENTS = "schedulePatients";
+const SCHEDULE_GROUP_REPLACE_FIELDS = ["customerName", "scheduledDate"];
+const SCHEDULE_CSV_HEADERS = ["受診者コード", "氏名", "カナ氏名", "性別名称", "生年月日"];
 const EXAM_GROUP_VALUES = "examGroupValues";
 const PROGRESS_SUMMARIES = "progressSummaries";
 const QUESTIONNAIRE_RESPONSES = "questionnaireResponses";
@@ -487,6 +489,7 @@ function bindUi() {
   document.querySelector("#openAllGroups").addEventListener("click", () => setAllGroupsCollapsed(false));
   document.querySelector("#closeAllGroups").addEventListener("click", () => setAllGroupsCollapsed(true));
   document.querySelector("#scheduleCsv").addEventListener("change", importScheduleCsv);
+  document.querySelector("#downloadScheduleFormat")?.addEventListener("click", downloadScheduleFormat);
   document.querySelector("#pullSchedules")?.addEventListener("click", () => pullCloud({ schedulesOnly: true }));
   document.querySelector("#syncNow").addEventListener("click", syncPending);
   document.querySelector("#saveSettings").addEventListener("click", saveSettings);
@@ -1382,7 +1385,7 @@ async function importScheduleCsv(event) {
     const rows = parseCsv(text);
     if (rows.length < 2) throw new Error("データ行がありません");
     const header = rows[0].map((value) => value.trim());
-    const required = ["受診者コード", "氏名", "カナ氏名", "性別名称", "生年月日"];
+    const required = SCHEDULE_CSV_HEADERS;
     const missing = required.filter((name) => !header.includes(name));
     if (missing.length) throw new Error(`${missing.join("、")} がありません`);
     const now = new Date().toISOString();
@@ -1391,6 +1394,7 @@ async function importScheduleCsv(event) {
       id: crypto.randomUUID(),
       name: file.name.replace(/\.[^.]+$/, ""),
       customerName: "",
+      scheduledDate: "",
       fileName: file.name,
       recordCount: 0,
       createdAt: now,
@@ -1498,14 +1502,15 @@ async function setActiveGroup(groupId) {
 function updateActiveGroupLabel() {
   if (!activeGroupLabel) return;
   const customer = activeGroup?.customerName ? ` / 顧客: ${activeGroup.customerName}` : "";
-  activeGroupLabel.textContent = activeGroup ? `予定グループ: ${activeGroup.name}${customer}` : "予定グループ未選択";
+  const scheduledDate = activeGroup?.scheduledDate ? ` / 予定日: ${activeGroup.scheduledDate}` : "";
+  activeGroupLabel.textContent = activeGroup ? `予定グループ: ${activeGroup.name}${customer}${scheduledDate}` : "予定グループ未選択";
   activeGroupLabel.classList.toggle("found", Boolean(activeGroup));
 }
 
 async function refreshScheduleRows() {
   if (!scheduleRows) return;
-  const focusedCustomerInput = document.activeElement?.closest?.("[data-customer-group-id]");
-  if (focusedCustomerInput && scheduleRows.contains(focusedCustomerInput)) return;
+  const focusedScheduleInput = document.activeElement?.closest?.("[data-schedule-group-field]");
+  if (focusedScheduleInput && scheduleRows.contains(focusedScheduleInput)) return;
   const groups = (await getAll(SCHEDULE_GROUPS)).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   scheduleRows.innerHTML = "";
   for (const group of groups) {
@@ -1514,7 +1519,8 @@ async function refreshScheduleRows() {
     tr.className = active ? "is-active-row" : "";
     tr.innerHTML = `
       <td>${escapeHtml(group.name)}</td>
-      <td><input class="schedule-customer-input" data-customer-group-id="${group.id}" value="${escapeAttribute(group.customerName || "")}" placeholder="顧客名"></td>
+      <td><input class="schedule-customer-input" data-schedule-group-field="customerName" data-schedule-group-id="${group.id}" value="${escapeAttribute(group.customerName || "")}" placeholder="顧客名"></td>
+      <td><input class="schedule-date-input" type="date" data-schedule-group-field="scheduledDate" data-schedule-group-id="${group.id}" value="${escapeAttribute(group.scheduledDate || "")}"></td>
       <td>${escapeHtml(group.fileName)}</td>
       <td>${escapeHtml(group.recordCount)}</td>
       <td>${formatDate(group.createdAt)}</td>
@@ -1522,8 +1528,8 @@ async function refreshScheduleRows() {
     `;
     scheduleRows.appendChild(tr);
   }
-  scheduleRows.querySelectorAll("[data-customer-group-id]").forEach((input) => {
-    input.addEventListener("change", () => saveScheduleCustomerName(input.dataset.customerGroupId, input.value));
+  scheduleRows.querySelectorAll("[data-schedule-group-field]").forEach((input) => {
+    input.addEventListener("change", () => saveScheduleGroupField(input.dataset.scheduleGroupId, input.dataset.scheduleGroupField, input.value));
   });
   scheduleRows.querySelectorAll("[data-group-id]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -1537,13 +1543,14 @@ async function refreshScheduleRows() {
   });
 }
 
-async function saveScheduleCustomerName(groupId, value) {
+async function saveScheduleGroupField(groupId, field, value) {
   const group = await getOne(SCHEDULE_GROUPS, groupId);
   if (!group) return;
-  const customerName = String(value || "").trim();
+  if (!SCHEDULE_GROUP_REPLACE_FIELDS.includes(field)) return;
+  const normalizedValue = String(value || "").trim();
   const updated = {
     ...group,
-    customerName,
+    [field]: normalizedValue,
     updatedAt: new Date().toISOString(),
     syncState: "pending",
     lastSyncError: ""
@@ -1554,7 +1561,7 @@ async function saveScheduleCustomerName(groupId, value) {
     updateActiveGroupLabel();
   }
   if (navigator.onLine) await syncPending();
-  toast("顧客名を保存しました");
+  toast(field === "scheduledDate" ? "予定日を保存しました" : "顧客名を保存しました");
 }
 
 async function getPlannedPatient(code) {
@@ -1836,8 +1843,10 @@ async function pullCloud(options = {}) {
       const localValue = await getOne(storeName, remoteValue.id);
       if (localValue?.syncState === "pending" || localValue?.syncState === "error") {
         const mergedValue = mergeWithoutErasing(remoteValue, localValue);
-        if (storeName === SCHEDULE_GROUPS && Object.prototype.hasOwnProperty.call(localValue, "customerName")) {
-          mergedValue.customerName = localValue.customerName;
+        if (storeName === SCHEDULE_GROUPS) {
+          for (const field of SCHEDULE_GROUP_REPLACE_FIELDS) {
+            if (Object.prototype.hasOwnProperty.call(localValue, field)) mergedValue[field] = localValue[field];
+          }
         }
         await put(storeName, {
           ...mergedValue,
@@ -1846,8 +1855,10 @@ async function pullCloud(options = {}) {
         });
       } else {
         const mergedValue = mergeWithoutErasing(localValue || {}, remoteValue);
-        if (storeName === SCHEDULE_GROUPS && Object.prototype.hasOwnProperty.call(remoteValue, "customerName")) {
-          mergedValue.customerName = remoteValue.customerName;
+        if (storeName === SCHEDULE_GROUPS) {
+          for (const field of SCHEDULE_GROUP_REPLACE_FIELDS) {
+            if (Object.prototype.hasOwnProperty.call(remoteValue, field)) mergedValue[field] = remoteValue[field];
+          }
         }
         await put(storeName, {
           ...mergedValue,
@@ -1999,12 +2010,18 @@ async function exportCsv() {
   ];
   const csv = lines.map((line) => line.map(csvCell).join(",")).join("\r\n");
   const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `出張健診_${activeGroup?.name || "全体"}_${new Date().toISOString().slice(0, 10)}.csv`;
-  link.click();
-  URL.revokeObjectURL(url);
+  const scheduledDate = compactDate(activeGroup?.scheduledDate) || compactDate(localIsoDate(new Date()));
+  downloadBlob(blob, `出張健診_${activeGroup?.name || "全体"}_${scheduledDate}.csv`);
+}
+
+function downloadScheduleFormat() {
+  const csv = `\uFEFF${SCHEDULE_CSV_HEADERS.map(csvCell).join(",")}\r\n`;
+  downloadBlob(new Blob([csv], { type: "text/csv;charset=utf-8" }), "受診予定CSVフォーマット.csv");
+}
+
+function compactDate(value) {
+  const date = String(value || "");
+  return /^\d{4}-\d{2}-\d{2}$/.test(date) ? date.replaceAll("-", "") : "";
 }
 
 async function exportRosters() {
@@ -2019,6 +2036,10 @@ async function exportRosters() {
   }
   if (!navigator.onLine) {
     toast("連名簿の作成にはオンライン接続が必要です", true);
+    return;
+  }
+  if (!parseGuidanceDate(activeGroup.scheduledDate || "")) {
+    toast("予定管理で予定日を入力してください", true);
     return;
   }
   if (!window.confirm(`予定グループ「${activeGroup.name}」の胸部・胃部連名簿を出力しますか？`)) return;
@@ -2040,7 +2061,8 @@ async function exportRosters() {
     toast("連名簿を作成しています…");
     await syncAndRefresh({ force: true });
     const rows = await getActiveRows();
-    const examDate = new Date();
+    const examDate = parseGuidanceDate(activeGroup.scheduledDate || "");
+    if (!examDate) throw new Error("予定日を確認してください");
     const common = rows.map(({ data }) => {
       const birthDate = parseGuidanceDate(data["生年月日"] || "");
       return {

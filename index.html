@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#176c6a">
   <title>出張健診 検査項目入力</title>
   <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="stylesheet" href="./styles.css?v=20260715-01">
+  <link rel="stylesheet" href="./styles.css?v=20260715-02">
 </head>
 <body>
   <div class="app-toast" id="appToast" role="status" aria-live="polite"></div>
@@ -341,6 +341,7 @@
             <span>受診予定CSV</span>
             <input id="scheduleCsv" type="file" accept=".csv,text/csv">
           </label>
+          <button class="ghost" id="downloadScheduleFormat" type="button">CSVフォーマット</button>
           <button class="ghost" id="pullSchedules" type="button">クラウドから予定読込</button>
         </div>
         <div class="table-wrap">
@@ -349,6 +350,7 @@
               <tr>
                 <th>グループ名</th>
                 <th>顧客名</th>
+                <th>予定日</th>
                 <th>ファイル名</th>
                 <th>レコード数</th>
                 <th>登録日時</th>
@@ -465,6 +467,6 @@
     </section>
   </main>
 
-  <script src="./app.js?v=20260715-01" type="module"></script>
+  <script src="./app.js?v=20260715-02" type="module"></script>
 </body>
 </html>
