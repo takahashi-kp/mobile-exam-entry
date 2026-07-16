@@ -7,7 +7,7 @@ const SETTINGS = "settings";
 const SCHEDULE_GROUPS = "scheduleGroups";
 const SCHEDULE_PATIENTS = "schedulePatients";
 const SCHEDULE_GROUP_EDIT_FIELDS = ["name", "customerName", "scheduledDate"];
-const SCHEDULE_GROUP_REPLACE_FIELDS = ["customerName", "scheduledDate"];
+const SCHEDULE_GROUP_REPLACE_FIELDS = ["customerName", "scheduledDate", "archivedAt"];
 const SCHEDULE_CSV_HEADERS = ["受診者コード", "氏名", "カナ氏名", "性別名称", "生年月日"];
 const EXAM_GROUP_VALUES = "examGroupValues";
 const PROGRESS_SUMMARIES = "progressSummaries";
@@ -492,6 +492,7 @@ function bindUi() {
   document.querySelector("#scheduleCsv").addEventListener("change", importScheduleCsv);
   document.querySelector("#downloadScheduleFormat")?.addEventListener("click", downloadScheduleFormat);
   document.querySelector("#pullSchedules")?.addEventListener("click", () => pullCloud({ schedulesOnly: true }));
+  document.querySelector("#showArchivedSchedules")?.addEventListener("change", refreshScheduleRows);
   document.querySelector("#syncNow").addEventListener("click", syncPending);
   document.querySelector("#saveSettings").addEventListener("click", saveSettings);
   document.querySelector("#pullCloud").addEventListener("click", pullCloud);
@@ -1400,6 +1401,7 @@ async function importScheduleCsv(event) {
       name: file.name.replace(/\.[^.]+$/, ""),
       customerName: "",
       scheduledDate: "",
+      archivedAt: "",
       fileName: file.name,
       recordCount: 0,
       createdAt: now,
@@ -1492,8 +1494,23 @@ function parseCsv(text) {
 }
 
 async function loadActiveGroup() {
+  const previousId = activeGroup?.id || "";
   const activeId = (await getOne(SETTINGS, "activeScheduleGroupId"))?.value || "";
-  activeGroup = activeId ? await getOne(SCHEDULE_GROUPS, activeId) : null;
+  const candidate = activeId ? await getOne(SCHEDULE_GROUPS, activeId) : null;
+  if (candidate?.archivedAt && isDirty && hasCurrentInput()) {
+    activeGroup = candidate;
+    updateActiveGroupLabel();
+    return;
+  }
+  if (candidate && !candidate.archivedAt) {
+    activeGroup = candidate;
+  } else {
+    await put(SETTINGS, { key: "activeScheduleGroupId", value: "" });
+    await selectLatestScheduleGroupIfNeeded();
+    const nextId = (await getOne(SETTINGS, "activeScheduleGroupId"))?.value || "";
+    activeGroup = nextId ? await getOne(SCHEDULE_GROUPS, nextId) : null;
+  }
+  if (previousId && previousId !== activeGroup?.id) resetForm();
   updateActiveGroupLabel();
 }
 
@@ -1508,7 +1525,8 @@ function updateActiveGroupLabel() {
   if (!activeGroupLabel) return;
   const customer = activeGroup?.customerName ? ` / 顧客: ${activeGroup.customerName}` : "";
   const scheduledDate = activeGroup?.scheduledDate ? ` / 予定日: ${activeGroup.scheduledDate}` : "";
-  activeGroupLabel.textContent = activeGroup ? `予定グループ: ${activeGroup.name}${customer}${scheduledDate}` : "予定グループ未選択";
+  const archived = activeGroup?.archivedAt ? " / アーカイブ済み（未保存入力を保持中）" : "";
+  activeGroupLabel.textContent = activeGroup ? `予定グループ: ${activeGroup.name}${customer}${scheduledDate}${archived}` : "予定グループ未選択";
   activeGroupLabel.classList.toggle("found", Boolean(activeGroup));
 }
 
@@ -1516,20 +1534,28 @@ async function refreshScheduleRows() {
   if (!scheduleRows) return;
   const focusedScheduleInput = document.activeElement?.closest?.("[data-schedule-group-field]");
   if (focusedScheduleInput && scheduleRows.contains(focusedScheduleInput)) return;
-  const groups = (await getAll(SCHEDULE_GROUPS)).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const showArchived = document.querySelector("#showArchivedSchedules")?.checked || false;
+  const groups = (await getAll(SCHEDULE_GROUPS))
+    .filter((group) => showArchived || !group.archivedAt)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   scheduleRows.innerHTML = "";
   for (const group of groups) {
     const active = activeGroup?.id === group.id;
+    const archived = Boolean(group.archivedAt);
+    const disabled = archived ? "disabled" : "";
     const tr = document.createElement("tr");
-    tr.className = active ? "is-active-row" : "";
+    tr.className = [active ? "is-active-row" : "", archived ? "is-archived-row" : ""].filter(Boolean).join(" ");
     tr.innerHTML = `
-      <td><input class="schedule-group-name-input" data-schedule-group-field="name" data-schedule-group-id="${group.id}" value="${escapeAttribute(group.name || "")}" placeholder="グループ名"></td>
-      <td><input class="schedule-customer-input" data-schedule-group-field="customerName" data-schedule-group-id="${group.id}" value="${escapeAttribute(group.customerName || "")}" placeholder="顧客名"></td>
-      <td><input class="schedule-date-input" type="date" data-schedule-group-field="scheduledDate" data-schedule-group-id="${group.id}" value="${escapeAttribute(group.scheduledDate || "")}"></td>
+      <td><input class="schedule-group-name-input" data-schedule-group-field="name" data-schedule-group-id="${group.id}" value="${escapeAttribute(group.name || "")}" placeholder="グループ名" ${disabled}></td>
+      <td><input class="schedule-customer-input" data-schedule-group-field="customerName" data-schedule-group-id="${group.id}" value="${escapeAttribute(group.customerName || "")}" placeholder="顧客名" ${disabled}></td>
+      <td><input class="schedule-date-input" type="date" data-schedule-group-field="scheduledDate" data-schedule-group-id="${group.id}" value="${escapeAttribute(group.scheduledDate || "")}" ${disabled}></td>
       <td>${escapeHtml(group.fileName)}</td>
       <td>${escapeHtml(group.recordCount)}</td>
       <td>${formatDate(group.createdAt)}</td>
-      <td><button class="ghost" data-group-id="${group.id}" type="button">${active ? "選択中" : "開く"}</button></td>
+      <td class="schedule-row-actions">${archived
+        ? `<span class="archive-badge">アーカイブ済み</span><button class="ghost" data-restore-group-id="${group.id}" type="button">復元</button>`
+        : `<button class="ghost" data-group-id="${group.id}" type="button">${active ? "選択中" : "開く"}</button><button class="danger-ghost" data-archive-group-id="${group.id}" type="button">アーカイブ</button>`}
+      </td>
     `;
     scheduleRows.appendChild(tr);
   }
@@ -1550,6 +1576,15 @@ async function refreshScheduleRows() {
       await refreshRows();
       switchView("entry");
     });
+  });
+  scheduleRows.querySelectorAll("[data-archive-group-id]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      if (!(await confirmSaveBeforeLeaving())) return;
+      await archiveScheduleGroup(button.dataset.archiveGroupId);
+    });
+  });
+  scheduleRows.querySelectorAll("[data-restore-group-id]").forEach((button) => {
+    button.addEventListener("click", () => restoreScheduleGroup(button.dataset.restoreGroupId));
   });
 }
 
@@ -1597,6 +1632,52 @@ async function cascadeScheduleGroupName(groupId, groupName, updatedAt) {
       });
     }
   }
+}
+
+async function archiveScheduleGroup(groupId) {
+  const group = await getOne(SCHEDULE_GROUPS, groupId);
+  if (!group || group.archivedAt) return;
+  const details = [group.scheduledDate ? `予定日: ${group.scheduledDate}` : "予定日: 未設定", `予定者: ${group.recordCount || 0}件`].join("\n");
+  const entered = window.prompt(`次の予定グループをアーカイブします。データは削除されず、後から復元できます。\n\n${group.name}\n${details}\n\n確認のためグループ名を入力してください。`);
+  if (entered === null) return;
+  if (entered.trim() !== group.name) {
+    toast("グループ名が一致しないためアーカイブしませんでした", true);
+    return;
+  }
+  const updated = {
+    ...group,
+    archivedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    syncState: "pending",
+    lastSyncError: ""
+  };
+  await put(SCHEDULE_GROUPS, updated);
+  if (activeGroup?.id === groupId) {
+    await put(SETTINGS, { key: "activeScheduleGroupId", value: "" });
+  }
+  await loadActiveGroup();
+  await updatePatientSummary();
+  await refreshScheduleRows();
+  await refreshRows();
+  if (navigator.onLine) await syncPending();
+  toast(`「${group.name}」をアーカイブしました`);
+}
+
+async function restoreScheduleGroup(groupId) {
+  const group = await getOne(SCHEDULE_GROUPS, groupId);
+  if (!group?.archivedAt) return;
+  if (!window.confirm(`予定グループ「${group.name}」を復元しますか？`)) return;
+  const updated = {
+    ...group,
+    archivedAt: "",
+    updatedAt: new Date().toISOString(),
+    syncState: "pending",
+    lastSyncError: ""
+  };
+  await put(SCHEDULE_GROUPS, updated);
+  await refreshScheduleRows();
+  if (navigator.onLine) await syncPending();
+  toast(`「${group.name}」を復元しました`);
 }
 
 async function getPlannedPatient(code) {
@@ -1989,9 +2070,13 @@ async function prepareSyncSchemaV2() {
 
 async function selectLatestScheduleGroupIfNeeded() {
   const activeId = (await getOne(SETTINGS, "activeScheduleGroupId"))?.value || "";
-  if (activeId && await getOne(SCHEDULE_GROUPS, activeId)) return;
-  const groups = (await getAll(SCHEDULE_GROUPS)).sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
-  if (groups[0]) await put(SETTINGS, { key: "activeScheduleGroupId", value: groups[0].id });
+  const current = activeId ? await getOne(SCHEDULE_GROUPS, activeId) : null;
+  if (current && !current.archivedAt) return;
+  if (current?.archivedAt && isDirty && hasCurrentInput()) return;
+  const groups = (await getAll(SCHEDULE_GROUPS))
+    .filter((group) => !group.archivedAt)
+    .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+  await put(SETTINGS, { key: "activeScheduleGroupId", value: groups[0]?.id || "" });
 }
 
 async function sendToCloud(settings, record) {

@@ -183,7 +183,7 @@ def merge_payload(existing, incoming):
         elif has_value(value) or not has_value(old_value):
             merged[key] = value
     if incoming.get("entityType") == "schedule_group":
-        for field in ("customerName", "scheduledDate"):
+        for field in ("customerName", "scheduledDate", "archivedAt"):
             if field in incoming:
                 merged[field] = incoming[field]
     return merged

@@ -18,9 +18,10 @@ class MergePayloadTests(unittest.TestCase):
         guidance = client.get("/guidance.js")
 
         self.assertEqual(index.status_code, 200)
-        self.assertIn(b"app.js?v=20260716-01", index.data)
+        self.assertIn(b"app.js?v=20260716-02", index.data)
         self.assertIn(b'id="appToast"', index.data)
         self.assertIn(b'id="downloadScheduleFormat"', index.data)
+        self.assertIn(b'id="showArchivedSchedules"', index.data)
         self.assertIn("予定日".encode(), index.data)
         self.assertIn('name="塵肺"'.encode(), index.data)
         self.assertIn('name="アスベスト"'.encode(), index.data)
@@ -30,6 +31,8 @@ class MergePayloadTests(unittest.TestCase):
         self.assertIn(b"isWindowsDevice", script.data)
         self.assertIn(b"document.body.appendChild(link)", script.data)
         self.assertIn(b"cascadeScheduleGroupName", script.data)
+        self.assertIn(b"archiveScheduleGroup", script.data)
+        self.assertIn(b"restoreScheduleGroup", script.data)
         self.assertIn("胸部連名簿を作成しますか？".encode(), script.data)
         self.assertIn("胃部連名簿を作成しますか？".encode(), script.data)
         self.assertEqual(guidance.status_code, 200)
@@ -102,6 +105,22 @@ class MergePayloadTests(unittest.TestCase):
         merged = merge_payload(existing, incoming)
 
         self.assertIs(merged["values"]["塵肺"], False)
+
+    def test_old_offline_group_update_does_not_remove_archive(self):
+        existing = {"entityType": "schedule_group", "name": "予定", "archivedAt": "2026-07-16T10:00:00Z"}
+        incoming = {"entityType": "schedule_group", "name": "予定"}
+
+        merged = merge_payload(existing, incoming)
+
+        self.assertEqual(merged["archivedAt"], "2026-07-16T10:00:00Z")
+
+    def test_archived_group_can_be_restored(self):
+        existing = {"entityType": "schedule_group", "archivedAt": "2026-07-16T10:00:00Z"}
+        incoming = {"entityType": "schedule_group", "archivedAt": ""}
+
+        merged = merge_payload(existing, incoming)
+
+        self.assertEqual(merged["archivedAt"], "")
 
 
 if __name__ == "__main__":

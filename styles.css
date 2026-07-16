@@ -621,10 +621,21 @@ textarea:focus {
 }
 
 .schedule-import {
+  align-items: end;
   border-bottom: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
   margin: -14px -14px 14px;
   padding: 14px;
-  max-width: 420px;
+  max-width: 900px;
+}
+
+.schedule-archive-toggle {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+  min-height: 38px;
 }
 
 table {
@@ -645,6 +656,33 @@ table {
 
 .schedule-date-input {
   min-width: 145px;
+}
+
+.schedule-row-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 210px;
+}
+
+.danger-ghost {
+  background: #fff7f5;
+  border-color: #c98578;
+  color: #8c2f20;
+}
+
+.archive-badge {
+  background: #ecefed;
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 12px;
+  padding: 5px 8px;
+}
+
+.is-archived-row td {
+  background: #f5f6f5;
+  color: var(--muted);
 }
 
 th,
