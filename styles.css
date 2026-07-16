@@ -427,7 +427,8 @@ textarea:focus {
   align-items: center;
   background: #f2f5f1;
   display: flex;
-  justify-content: space-between;
+  gap: 10px;
+  justify-content: flex-start;
   padding: 10px 12px;
 }
 
@@ -437,7 +438,13 @@ textarea:focus {
 }
 
 .xray-subgroup-toggle {
-  min-height: 30px;
+  background: linear-gradient(#ffffff, #f1f4f3);
+  border: 1px solid #9eaaa6;
+  border-radius: 999px;
+  box-shadow: 0 1px 2px rgba(24, 48, 47, .12), inset 0 1px 0 rgba(255, 255, 255, .9);
+  color: var(--muted);
+  font-size: 12px;
+  min-height: 28px;
   padding: 4px 10px;
 }
 
