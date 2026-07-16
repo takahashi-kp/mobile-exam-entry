@@ -637,6 +637,7 @@ table {
   min-width: 900px;
 }
 
+.schedule-group-name-input,
 .schedule-customer-input {
   min-width: 180px;
   width: 100%;

@@ -18,7 +18,7 @@ class MergePayloadTests(unittest.TestCase):
         guidance = client.get("/guidance.js")
 
         self.assertEqual(index.status_code, 200)
-        self.assertIn(b"app.js?v=20260715-03", index.data)
+        self.assertIn(b"app.js?v=20260716-01", index.data)
         self.assertIn(b'id="appToast"', index.data)
         self.assertIn(b'id="downloadScheduleFormat"', index.data)
         self.assertIn("予定日".encode(), index.data)
@@ -29,6 +29,7 @@ class MergePayloadTests(unittest.TestCase):
         self.assertIn(b"syncSchemaV2Reseeded", script.data)
         self.assertIn(b"isWindowsDevice", script.data)
         self.assertIn(b"document.body.appendChild(link)", script.data)
+        self.assertIn(b"cascadeScheduleGroupName", script.data)
         self.assertIn("胸部連名簿を作成しますか？".encode(), script.data)
         self.assertIn("胃部連名簿を作成しますか？".encode(), script.data)
         self.assertEqual(guidance.status_code, 200)

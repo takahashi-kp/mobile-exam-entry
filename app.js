@@ -6,6 +6,7 @@ const STORE = "records";
 const SETTINGS = "settings";
 const SCHEDULE_GROUPS = "scheduleGroups";
 const SCHEDULE_PATIENTS = "schedulePatients";
+const SCHEDULE_GROUP_EDIT_FIELDS = ["name", "customerName", "scheduledDate"];
 const SCHEDULE_GROUP_REPLACE_FIELDS = ["customerName", "scheduledDate"];
 const SCHEDULE_CSV_HEADERS = ["受診者コード", "氏名", "カナ氏名", "性別名称", "生年月日"];
 const EXAM_GROUP_VALUES = "examGroupValues";
@@ -1522,7 +1523,7 @@ async function refreshScheduleRows() {
     const tr = document.createElement("tr");
     tr.className = active ? "is-active-row" : "";
     tr.innerHTML = `
-      <td>${escapeHtml(group.name)}</td>
+      <td><input class="schedule-group-name-input" data-schedule-group-field="name" data-schedule-group-id="${group.id}" value="${escapeAttribute(group.name || "")}" placeholder="グループ名"></td>
       <td><input class="schedule-customer-input" data-schedule-group-field="customerName" data-schedule-group-id="${group.id}" value="${escapeAttribute(group.customerName || "")}" placeholder="顧客名"></td>
       <td><input class="schedule-date-input" type="date" data-schedule-group-field="scheduledDate" data-schedule-group-id="${group.id}" value="${escapeAttribute(group.scheduledDate || "")}"></td>
       <td>${escapeHtml(group.fileName)}</td>
@@ -1533,7 +1534,12 @@ async function refreshScheduleRows() {
     scheduleRows.appendChild(tr);
   }
   scheduleRows.querySelectorAll("[data-schedule-group-field]").forEach((input) => {
-    input.addEventListener("change", () => saveScheduleGroupField(input.dataset.scheduleGroupId, input.dataset.scheduleGroupField, input.value));
+    input.addEventListener("change", async () => {
+      const saved = await saveScheduleGroupField(input.dataset.scheduleGroupId, input.dataset.scheduleGroupField, input.value);
+      if (!saved && input.dataset.scheduleGroupField === "name") {
+        input.value = (await getOne(SCHEDULE_GROUPS, input.dataset.scheduleGroupId))?.name || "";
+      }
+    });
   });
   scheduleRows.querySelectorAll("[data-group-id]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -1549,23 +1555,48 @@ async function refreshScheduleRows() {
 
 async function saveScheduleGroupField(groupId, field, value) {
   const group = await getOne(SCHEDULE_GROUPS, groupId);
-  if (!group) return;
-  if (!SCHEDULE_GROUP_REPLACE_FIELDS.includes(field)) return;
+  if (!group) return false;
+  if (!SCHEDULE_GROUP_EDIT_FIELDS.includes(field)) return false;
   const normalizedValue = String(value || "").trim();
+  if (field === "name" && !normalizedValue) {
+    toast("グループ名は空欄にできません", true);
+    return false;
+  }
+  const now = new Date().toISOString();
   const updated = {
     ...group,
     [field]: normalizedValue,
-    updatedAt: new Date().toISOString(),
+    updatedAt: now,
     syncState: "pending",
     lastSyncError: ""
   };
   await put(SCHEDULE_GROUPS, updated);
+  if (field === "name") await cascadeScheduleGroupName(groupId, normalizedValue, now);
   if (activeGroup?.id === groupId) {
     activeGroup = updated;
     updateActiveGroupLabel();
   }
   if (navigator.onLine) await syncPending();
-  toast(field === "scheduledDate" ? "予定日を保存しました" : "顧客名を保存しました");
+  const labels = { name: "グループ名", customerName: "顧客名", scheduledDate: "予定日" };
+  toast(`${labels[field]}を保存しました`);
+  return true;
+}
+
+async function cascadeScheduleGroupName(groupId, groupName, updatedAt) {
+  const storeNames = [SCHEDULE_PATIENTS, STORE, EXAM_GROUP_VALUES, PROGRESS_SUMMARIES, QUESTIONNAIRE_RESPONSES];
+  for (const storeName of storeNames) {
+    const items = await getAll(storeName);
+    for (const item of items) {
+      if (item.groupId !== groupId && item.scheduleGroupId !== groupId) continue;
+      await put(storeName, {
+        ...item,
+        scheduleGroupName: groupName,
+        updatedAt,
+        syncState: "pending",
+        lastSyncError: ""
+      });
+    }
+  }
 }
 
 async function getPlannedPatient(code) {
