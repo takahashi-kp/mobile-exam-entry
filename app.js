@@ -193,7 +193,7 @@ const QUESTIONNAIRE_SECTIONS = [
 const PROGRESS_GROUPS = [
   { label: "便区分", target: "便区分", fields: ["便区分", "便区分_自由入力"] },
   { label: "視力", target: "視力", fields: ["視力右裸眼", "視力右矯正", "視力左裸眼", "視力左矯正", "視力_自由入力"] },
-  { label: "X線", target: "X線", fields: ["胸部X線フィルム番号", "胃部X線フィルム番号", "塵肺", "アスベスト", "塵肺・アスベスト", "X線_自由入力"] },
+  { label: "X線", target: "X線", fields: ["胸部X線フィルム番号", "胃部X線フィルム番号", "塵肺", "アスベスト", "塵肺・アスベスト", "胸部X線_自由入力", "胃部X線_自由入力", "X線_自由入力"] },
   { label: "食後", target: "食後", fields: ["空腹時間（時）", "空腹時間（分）", "食後時間_自由入力"] },
   { label: "尿", target: "尿", fields: ["尿蛋白定性", "尿糖定性", "尿潜血", "尿ウロビリノーゲン定性", "ケトン体（アセトン体）", "尿PH", "尿検査_自由入力"] },
   { label: "血圧", target: "血圧", fields: ["1回目最高血圧", "1回目最低血圧", "2回目最高血圧", "2回目最低血圧", "血圧_自由入力"] },
@@ -569,6 +569,31 @@ function setupCollapsibleGroups() {
     const saved = localStorage.getItem(groupStorageKey(section.dataset.group));
     setGroupCollapsed(section, saved === "closed", false);
   });
+  setupXraySubgroups();
+}
+
+function setupXraySubgroups() {
+  document.querySelectorAll("[data-xray-subgroup]").forEach((panel) => {
+    const button = panel.querySelector(".xray-subgroup-toggle");
+    if (!button) return;
+    button.addEventListener("click", () => {
+      setXraySubgroupCollapsed(panel, !panel.classList.contains("is-collapsed"));
+    });
+    const saved = localStorage.getItem(`xray-subgroup:${panel.dataset.xraySubgroup}`);
+    setXraySubgroupCollapsed(panel, saved !== "open", false);
+  });
+}
+
+function setXraySubgroupCollapsed(panel, collapsed, persist = true) {
+  panel.classList.toggle("is-collapsed", collapsed);
+  const button = panel.querySelector(".xray-subgroup-toggle");
+  if (button) {
+    button.textContent = collapsed ? "開く" : "閉じる";
+    button.setAttribute("aria-expanded", String(!collapsed));
+  }
+  if (persist) {
+    localStorage.setItem(`xray-subgroup:${panel.dataset.xraySubgroup}`, collapsed ? "closed" : "open");
+  }
 }
 
 function setGroupCollapsed(section, collapsed, persist = true) {
@@ -1766,6 +1791,9 @@ async function editRecord(id, targetGroup = "") {
   const record = await getOne(STORE, id);
   if (!record) return;
   const data = await assembleRecordData(record);
+  if (!data["胸部X線_自由入力"] && data["X線_自由入力"]) {
+    data["胸部X線_自由入力"] = data["X線_自由入力"];
+  }
   editingId = id;
   setProgrammaticFormChange(() => {
     form.reset();

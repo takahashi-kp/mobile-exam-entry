@@ -99,6 +99,22 @@ def dust_label(item):
     return ""
 
 
+def dust_count_label(rows):
+    has_pneumoconiosis = False
+    has_asbestos = False
+    for item in rows:
+        if "pneumoconiosis" in item:
+            has_pneumoconiosis = has_pneumoconiosis or bool(item.get("pneumoconiosis"))
+            has_asbestos = has_asbestos or bool(item.get("asbestos"))
+        elif item.get("legacyDust") or item.get("asbestos"):
+            has_pneumoconiosis = True
+    if has_pneumoconiosis:
+        return "塵肺件数"
+    if has_asbestos:
+        return "アスベスト件数"
+    return ""
+
+
 def build_roster(kind, customer_name, exam_date, rows):
     if kind not in TEMPLATES:
         raise ValueError("Unknown roster type")
@@ -128,6 +144,9 @@ def build_roster(kind, customer_name, exam_date, rows):
     sheet.page_setup.orientation = sheet.ORIENTATION_PORTRAIT
     if kind == "chest":
         sheet.column_dimensions["G"].width = 18
+        count_label = dust_count_label(rows)
+        if count_label:
+            sheet["E2"] = count_label
 
     for row_number in range(8, 1001):
         for col in range(3, 8):

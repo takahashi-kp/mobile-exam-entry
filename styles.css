@@ -415,10 +415,64 @@ textarea:focus {
   color: var(--ink);
 }
 
-.xray-asbestos-line {
-  grid-template-columns: max-content max-content max-content;
-  justify-content: start;
-  margin-top: 12px;
+.xray-subgroup {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin-top: 10px;
+  overflow: hidden;
+}
+
+.xray-subgroup-header {
+  align-items: center;
+  background: #f2f5f1;
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 12px;
+}
+
+.xray-subgroup-header h3 {
+  font-size: 15px;
+  margin: 0;
+}
+
+.xray-subgroup-toggle {
+  min-height: 30px;
+  padding: 4px 10px;
+}
+
+.xray-subgroup.is-collapsed .xray-subgroup-body {
+  display: none;
+}
+
+.xray-subgroup-body {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+}
+
+.xray-chest-row {
+  align-items: end;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: max-content max-content;
+}
+
+.xray-checks {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  min-height: 40px;
+}
+
+.xray-note {
+  display: grid;
+  gap: 5px;
+  max-width: 260px;
+}
+
+.xray-note input {
+  width: 100%;
 }
 
 .active-group-label {
@@ -1106,6 +1160,14 @@ button:disabled {
 }
 
 @media (max-width: 760px) {
+  .xray-chest-row {
+    grid-template-columns: 1fr;
+  }
+
+  .xray-checks {
+    flex-wrap: wrap;
+  }
+
   .guidance-grid,
   .guidance-checks {
     grid-template-columns: 1fr;

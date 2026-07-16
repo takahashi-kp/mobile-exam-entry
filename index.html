@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#176c6a">
   <title>出張健診 検査項目入力</title>
   <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="stylesheet" href="./styles.css?v=20260716-02">
+  <link rel="stylesheet" href="./styles.css?v=20260716-03">
 </head>
 <body>
   <div class="app-toast" id="appToast" role="status" aria-live="polite"></div>
@@ -127,25 +127,44 @@
 
           <div class="section-block" data-group="X線">
             <h2>X線</h2>
-            <div class="form-grid xray-grid">
-              <label>
-                <span>胸部X線フィルム番号</span>
-                <input class="five-digit-input" name="胸部X線フィルム番号" inputmode="numeric" maxlength="5">
-              </label>
-              <label>
-                <span>胃部X線フィルム番号</span>
-                <input class="five-digit-input" name="胃部X線フィルム番号" inputmode="numeric" maxlength="5">
-              </label>
+            <div class="xray-subgroup is-collapsed" data-xray-subgroup="chest">
+              <div class="xray-subgroup-header">
+                <h3>胸部X線</h3>
+                <button class="xray-subgroup-toggle" type="button" aria-expanded="false">開く</button>
+              </div>
+              <div class="xray-subgroup-body">
+                <div class="xray-chest-row">
+                  <label>
+                    <span>胸部X線フィルム番号</span>
+                    <input class="five-digit-input" name="胸部X線フィルム番号" inputmode="numeric" maxlength="5">
+                  </label>
+                  <div class="xray-checks">
+                    <label class="choice"><input type="checkbox" name="塵肺" value="該当">塵肺</label>
+                    <label class="choice"><input type="checkbox" name="アスベスト" value="該当">アスベスト</label>
+                  </div>
+                </div>
+                <label class="xray-note">
+                  <span>胸部X線備考</span>
+                  <input name="胸部X線_自由入力" maxlength="15" placeholder="胸部X線備考">
+                </label>
+              </div>
             </div>
-            <div class="choice-line xray-asbestos-line">
-              <span class="field-title">X線区分</span>
-              <label class="choice"><input type="checkbox" name="塵肺" value="該当">塵肺</label>
-              <label class="choice"><input type="checkbox" name="アスベスト" value="該当">アスベスト</label>
+            <div class="xray-subgroup is-collapsed" data-xray-subgroup="stomach">
+              <div class="xray-subgroup-header">
+                <h3>胃部X線</h3>
+                <button class="xray-subgroup-toggle" type="button" aria-expanded="false">開く</button>
+              </div>
+              <div class="xray-subgroup-body">
+                <label>
+                  <span>胃部X線フィルム番号</span>
+                  <input class="five-digit-input" name="胃部X線フィルム番号" inputmode="numeric" maxlength="5">
+                </label>
+                <label class="xray-note">
+                  <span>胃部X線備考</span>
+                  <input name="胃部X線_自由入力" maxlength="15" placeholder="胃部X線備考">
+                </label>
+              </div>
             </div>
-            <label class="group-note">
-              <span>自由入力</span>
-              <input name="X線_自由入力" maxlength="15" placeholder="備考">
-            </label>
           </div>
 
           <div class="section-block" data-group="食後">
@@ -469,6 +488,6 @@
     </section>
   </main>
 
-  <script src="./app.js?v=20260716-02" type="module"></script>
+  <script src="./app.js?v=20260716-03" type="module"></script>
 </body>
 </html>
