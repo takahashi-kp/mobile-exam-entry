@@ -931,15 +931,14 @@ function validateQuestionnaire(answers) {
   }
   const frequency = answers["特定_18_飲酒頻度"] || "";
   const amount = answers["特定_19_飲酒量"] || "";
-  const noDrink = !frequency || ["やめた", "飲まない（飲めない）"].includes(frequency);
-  const amountLevel = ["1合未満", "1〜2合未満", "2〜3合未満", "3〜5合未満", "5合以上"].indexOf(amount);
-  if (noDrink && amount) {
+  const noAlcoholFrequency = ["やめた", "飲まない", "飲まない（飲めない）"].includes(frequency);
+  if (!frequency && amount) {
     return {
       field: "特定_19_飲酒量",
-      message: "飲酒頻度が未入力・「やめた」・「飲まない」の場合、飲酒量は入力しないでください。"
+      message: "飲酒頻度が未入力の場合、飲酒量は入力しないでください。"
     };
   }
-  if (["やめた", "飲まない（飲めない）"].includes(frequency) && amountLevel >= 1) {
+  if (noAlcoholFrequency && amount && amount !== "1合未満") {
     return {
       field: "特定_19_飲酒量",
       message: "お酒を「やめた」または「飲まない」とした場合、飲酒量は空欄または1合未満にしてください。"
@@ -2378,3 +2377,4 @@ function toast(message, isError = false) {
   window.clearTimeout(toast.hideTimer);
   toast.hideTimer = window.setTimeout(() => appToast.classList.remove("visible"), isError ? 7000 : 4000);
 }
+
