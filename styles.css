@@ -342,7 +342,7 @@ textarea:focus {
 .id-row {
   align-items: end;
   column-gap: 12px;
-  grid-template-columns: minmax(320px, 1fr) max-content max-content max-content max-content max-content max-content;
+  grid-template-columns: max-content max-content max-content max-content max-content max-content max-content 1fr;
   justify-content: start;
 }
 
@@ -367,8 +367,31 @@ textarea:focus {
   width: 150px;
 }
 
+.walkin-sex-input {
+  width: 72px;
+}
+
 .walkin-birth-input {
   width: 120px;
+}
+
+.identity-input[readonly] {
+  background: #f8faf8;
+  color: #253735;
+  cursor: default;
+}
+
+.identity-edit-button {
+  align-self: end;
+  min-height: 36px;
+  padding-inline: 12px;
+}
+
+.identity-edit-button.is-active {
+  background: linear-gradient(#fff8db, #f0df94);
+  border-color: #b79a35;
+  color: #3d3410;
+  font-weight: 700;
 }
 
 .patient-summary {

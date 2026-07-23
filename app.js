@@ -233,12 +233,14 @@ const guidanceSummary = document.querySelector("#guidanceSummary");
 const guidanceChecks = document.querySelector("#guidanceChecks");
 const patientSummary = document.querySelector("#patientSummary");
 const activeGroupLabel = document.querySelector("#activeGroupLabel");
+const identityEditButton = document.querySelector("#editPatientIdentity");
 let editingId = null;
 let activeGroup = null;
 let db;
 let isDirty = false;
 let isProgrammaticChange = false;
 let personalValueBeforeEdit = "";
+let patientIdentityEditable = false;
 let syncInProgress = false;
 let pullInProgress = false;
 let lastAutomaticRefreshAt = 0;
@@ -481,6 +483,7 @@ function bindUi() {
   document.addEventListener("input", markDirtyFromEvent);
   document.addEventListener("change", markDirtyFromEvent);
   document.querySelector("#saveRecord").addEventListener("click", saveCurrentRecord);
+  identityEditButton?.addEventListener("click", () => setPatientIdentityEditable(true));
   document.querySelector("#saveQuestionnaire")?.addEventListener("click", saveQuestionnaireRecord);
   document.querySelector("#newRecord").addEventListener("click", async () => {
     if (await confirmSaveBeforeLeaving()) {
@@ -515,7 +518,7 @@ function bindUi() {
   });
   personalInput.addEventListener("change", handlePersonalNumberChange);
   personalInput.addEventListener("input", updatePatientSummary);
-  ["氏名", "カナ氏名", "生年月日"].forEach((name) => {
+  ["氏名", "カナ氏名", "性別名称", "生年月日"].forEach((name) => {
     form.elements.namedItem(name)?.addEventListener("input", updatePatientSummary);
   });
 }
@@ -902,11 +905,10 @@ async function saveCurrentRecord() {
 async function saveQuestionnaireRecord(options = {}) {
   const header = getPatientHeaderData();
   const planned = await getPlannedPatient(header["個人番号"]);
-  if (planned) {
-    header["氏名"] = planned["氏名"] || "";
-    header["カナ氏名"] = planned["カナ氏名"] || "";
-    header["性別名称"] = planned["性別名称"] || "";
-    header["生年月日"] = planned["生年月日"] || "";
+  if (planned && !patientIdentityEditable) {
+    ["氏名", "カナ氏名", "性別名称", "生年月日"].forEach((key) => {
+      if (!header[key]) header[key] = planned[key] || "";
+    });
   }
   if (!header["受付番号"] && !header["個人番号"]) {
     toast("受付番号または個人番号を入力してください。", true);
@@ -1131,11 +1133,10 @@ function clearQuestionnaireForm() {
 
 async function saveRecordData(data, options = {}) {
   const planned = await getPlannedPatient(data["個人番号"]);
-  if (planned) {
-    data["氏名"] = planned["氏名"] || "";
-    data["カナ氏名"] = planned["カナ氏名"] || "";
-    data["性別名称"] = planned["性別名称"] || "";
-    data["生年月日"] = planned["生年月日"] || "";
+  if (planned && !patientIdentityEditable) {
+    ["氏名", "カナ氏名", "性別名称", "生年月日"].forEach((key) => {
+      if (!data[key]) data[key] = planned[key] || "";
+    });
   }
   const validation = validateRecord(data);
   if (validation) {
@@ -1165,6 +1166,7 @@ async function saveRecordData(data, options = {}) {
   editingId = record.id;
   isDirty = false;
   personalValueBeforeEdit = data["個人番号"] || "";
+  setPatientIdentityEditable(false);
   await refreshRows();
   if (navigator.onLine) await syncPending();
   if (!options.silent) toast("ローカルに保存しました");
@@ -1303,6 +1305,7 @@ function resetForm() {
   setProgrammaticFormChange(() => form.reset());
   isDirty = false;
   personalValueBeforeEdit = "";
+  setPatientIdentityEditable(false);
   updatePatientSummary();
   toast("新規入力に切り替えました");
 }
@@ -1313,6 +1316,7 @@ async function startNewWalkInRecord() {
     form.reset();
     clearQuestionnaireForm();
   });
+  setPatientIdentityEditable(true);
   isDirty = false;
   personalValueBeforeEdit = "";
   await updatePatientSummary();
@@ -1320,7 +1324,6 @@ async function startNewWalkInRecord() {
   form.elements.namedItem("個人番号")?.focus();
   toast("飛び入り受診者の新規入力を開始しました。個人番号と氏名を入力してください。");
 }
-
 
 async function handlePersonalNumberChange(event) {
   event.stopPropagation();
@@ -1411,6 +1414,7 @@ async function loadEntryForPersonalNumber(personalNumber) {
     applyEntryRecordToForm(data);
     editingId = record.id;
     personalValueBeforeEdit = data["個人番号"] || code;
+    setPatientIdentityEditable(false);
   } else {
     const patient = await getPlannedPatient(code);
     const data = patient ? plannedToData(patient) : { "個人番号": code };
@@ -1418,6 +1422,7 @@ async function loadEntryForPersonalNumber(personalNumber) {
     applyEntryRecordToForm(data, { reset: false });
     editingId = null;
     personalValueBeforeEdit = code;
+    setPatientIdentityEditable(false);
   }
   resetQuestionnaireForm();
   isDirty = false;
@@ -1861,21 +1866,28 @@ async function getPlannedPatient(code) {
 }
 
 async function updatePatientSummary() {
-  if (!patientSummary) return;
-  const patient = await getPlannedPatient(form.elements.namedItem("個人番号").value);
-  if (!patient) {
-    const data = formToRecord();
-    if (data["氏名"] || data["カナ氏名"] || data["生年月日"]) {
-      patientSummary.innerHTML = formatPatientSummary(data);
-      patientSummary.classList.add("found");
-      return;
-    }
-    patientSummary.innerHTML = activeGroup ? "予定外受診者" : "予定グループ未選択";
-    patientSummary.classList.toggle("found", Boolean(data["個人番号"]));
-    return;
-  }
-  patientSummary.innerHTML = formatPatientSummary(patient);
-  patientSummary.classList.add("found");
+  updateIdentityEditButton();
+}
+
+function setPatientIdentityEditable(editable) {
+  patientIdentityEditable = Boolean(editable);
+  getPatientIdentityFields().forEach((field) => {
+    field.readOnly = !patientIdentityEditable;
+  });
+  updateIdentityEditButton();
+}
+
+function getPatientIdentityFields() {
+  return ["氏名", "カナ氏名", "性別名称", "生年月日"]
+    .map((name) => form.elements.namedItem(name))
+    .filter(Boolean);
+}
+
+function updateIdentityEditButton() {
+  if (!identityEditButton) return;
+  identityEditButton.textContent = patientIdentityEditable ? "編集中" : "修正";
+  identityEditButton.classList.toggle("is-active", patientIdentityEditable);
+  identityEditButton.setAttribute("aria-pressed", patientIdentityEditable ? "true" : "false");
 }
 
 function formatPatientSummary(data) {
@@ -1944,6 +1956,7 @@ async function editRecord(id, targetGroup = "") {
   applyEntryRecordToForm(data);
   isDirty = false;
   personalValueBeforeEdit = data["個人番号"] || "";
+  setPatientIdentityEditable(false);
   await updatePatientSummary();
   switchView("entry");
   scrollToGroup(targetGroup);

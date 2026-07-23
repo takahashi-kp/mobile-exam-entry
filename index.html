@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#176c6a">
   <title>出張健診 検査項目入力</title>
   <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="stylesheet" href="./styles.css?v=20260716-04">
+  <link rel="stylesheet" href="./styles.css?v=20260723-02">
 </head>
 <body>
   <div class="app-toast" id="appToast" role="status" aria-live="polite"></div>
@@ -36,7 +36,6 @@
     </header>
     <div class="patient-sticky">
       <div class="form-grid id-row">
-        <div class="patient-summary" id="patientSummary">予定未選択</div>
         <label class="short-field reception-field">
           <span>受付番号</span>
           <input class="reception-input" name="受付番号" form="examForm" inputmode="numeric" maxlength="5">
@@ -45,18 +44,23 @@
           <span>個人番号</span>
           <input class="personal-input" name="個人番号" form="examForm" inputmode="numeric" maxlength="11">
         </label>
-        <label class="short-field walkin-name-field">
-          <span>氏名</span>
-          <input class="walkin-name-input" name="氏名" form="examForm">
-        </label>
-        <label class="short-field walkin-kana-field">
+        <label class="short-field walkin-kana-field identity-field">
           <span>カナ氏名</span>
-          <input class="walkin-kana-input" name="カナ氏名" form="examForm">
+          <input class="walkin-kana-input identity-input" name="カナ氏名" form="examForm" readonly>
         </label>
-        <label class="short-field walkin-birth-field">
+        <label class="short-field walkin-name-field identity-field">
+          <span>氏名</span>
+          <input class="walkin-name-input identity-input" name="氏名" form="examForm" readonly>
+        </label>
+        <label class="short-field walkin-sex-field identity-field">
+          <span>性別</span>
+          <input class="walkin-sex-input identity-input" name="性別名称" form="examForm" readonly>
+        </label>
+        <label class="short-field walkin-birth-field identity-field">
           <span>生年月日</span>
-          <input class="walkin-birth-input" name="生年月日" form="examForm" placeholder="YYYY/MM/DD">
+          <input class="walkin-birth-input identity-input" name="生年月日" form="examForm" placeholder="YYYY/MM/DD" readonly>
         </label>
+        <button class="ghost identity-edit-button" id="editPatientIdentity" type="button">修正</button>
         <div class="active-group-label" id="activeGroupLabel">予定グループ未選択</div>
       </div>
     </div>
@@ -488,6 +492,6 @@
     </section>
   </main>
 
-  <script src="./app.js?v=20260716-03" type="module"></script>
+  <script src="./app.js?v=20260723-02" type="module"></script>
 </body>
 </html>
