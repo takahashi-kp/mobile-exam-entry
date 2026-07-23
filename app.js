@@ -1346,7 +1346,7 @@ async function handlePersonalNumberChange(event) {
     await loadEntryForPersonalNumber(newValue);
     return;
   }
-  const shouldSave = window.confirm("未保存の入力があります。移動する前に保存しますか？\n\nOK: 保存して移動\nキャンセル: 保存せずに移動");
+  const shouldSave = window.confirm("移動する前に保存しますか？\n\nOK: 保存して移動\nキャンセル: 保存せずに移動");
   const currentData = formToRecord();
   currentData["個人番号"] = oldValue;
   if (shouldSave) {
