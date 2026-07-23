@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#176c6a">
   <title>出張健診 検査項目入力</title>
   <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="stylesheet" href="./styles.css?v=20260723-03">
+  <link rel="stylesheet" href="./styles.css?v=20260723-04">
 </head>
 <body>
   <div class="app-toast" id="appToast" role="status" aria-live="polite"></div>
@@ -36,6 +36,7 @@
     </header>
     <div class="patient-sticky">
       <div class="form-grid id-row">
+        <div class="guidance-badge" id="entryGuidanceBadge" hidden>指導</div>
         <label class="short-field reception-field">
           <span>受付番号</span>
           <input class="reception-input" name="受付番号" form="examForm" inputmode="numeric" maxlength="5">
@@ -315,6 +316,13 @@
               <textarea name="メモ" rows="4"></textarea>
             </label>
           </div>
+
+          <div class="section-block guidance-result entry-guidance-result" id="entryGuidanceResultPanel">
+            <span>保健指導判定</span>
+            <strong id="entryGuidanceResult">--</strong>
+            <p id="entryGuidanceSummary">条件を入力してください</p>
+            <div class="guidance-checks" id="entryGuidanceChecks"></div>
+          </div>
         </form>
       </section>
 
@@ -496,6 +504,6 @@
     </section>
   </main>
 
-  <script src="./app.js?v=20260723-03" type="module"></script>
+  <script src="./app.js?v=20260723-04" type="module"></script>
 </body>
 </html>

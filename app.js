@@ -231,6 +231,10 @@ const guidanceFields = {
 const guidanceResult = document.querySelector("#guidanceResult");
 const guidanceSummary = document.querySelector("#guidanceSummary");
 const guidanceChecks = document.querySelector("#guidanceChecks");
+const entryGuidanceBadge = document.querySelector("#entryGuidanceBadge");
+const entryGuidanceResult = document.querySelector("#entryGuidanceResult");
+const entryGuidanceSummary = document.querySelector("#entryGuidanceSummary");
+const entryGuidanceChecks = document.querySelector("#entryGuidanceChecks");
 const patientSummary = document.querySelector("#patientSummary");
 const activeGroupLabel = document.querySelector("#activeGroupLabel");
 const identityEditButton = document.querySelector("#editPatientIdentity");
@@ -264,6 +268,7 @@ async function init() {
   await loadActiveGroup();
   await refreshScheduleRows();
   await refreshRows();
+  updateEntryGuidanceSelection();
   updateOnlineStatus();
   window.addEventListener("online", () => {
     updateOnlineStatus();
@@ -530,6 +535,7 @@ function markDirtyFromEvent(event) {
   if (!target?.name) return;
   if (target.form !== form && !questionnaireForm?.contains(target)) return;
   isDirty = true;
+  if (target.form === form) updateEntryGuidanceSelection();
 }
 
 function rememberQuestionnaireChoiceState(event) {
@@ -706,10 +712,21 @@ function updateGuidanceSelection() {
   if (!guidanceResult || !guidanceSummary || !guidanceChecks) return;
   if (guidanceFields.year && !guidanceFields.year.value) guidanceFields.year.value = String(defaultFiscalYear());
   const result = evaluateGuidanceSelection();
-  guidanceResult.textContent = result.finalLabel;
-  guidanceResult.className = result.finalClass;
-  guidanceSummary.textContent = result.summary;
-  guidanceChecks.innerHTML = result.items.map((item) => `
+  renderGuidanceResult(guidanceResult, guidanceSummary, guidanceChecks, result);
+  updateEntryGuidanceSelection();
+}
+function updateEntryGuidanceSelection() {
+  if (!entryGuidanceResult || !entryGuidanceSummary || !entryGuidanceChecks) return;
+  const result = evaluateGuidanceValues(getEntryGuidanceValues());
+  renderGuidanceResult(entryGuidanceResult, entryGuidanceSummary, entryGuidanceChecks, result);
+  if (entryGuidanceBadge) entryGuidanceBadge.hidden = !result.finalClass.includes("target");
+}
+
+function renderGuidanceResult(resultElement, summaryElement, checksElement, result) {
+  resultElement.textContent = result.finalLabel;
+  resultElement.className = result.finalClass;
+  summaryElement.textContent = result.summary;
+  checksElement.innerHTML = result.items.map((item) => `
     <div class="guidance-check ${item.status}">
       <span>${escapeHtml(item.label)}</span>
       <strong>${escapeHtml(item.text)}</strong>
@@ -719,17 +736,54 @@ function updateGuidanceSelection() {
 }
 
 function evaluateGuidanceSelection() {
-  const year = Number(guidanceFields.year?.value || defaultFiscalYear());
-  const sex = guidanceFields.sex?.value || "男性";
-  const insurance = guidanceFields.insurance?.value || "";
-  const birthDate = parseGuidanceDate(guidanceFields.birthDate?.value || "");
-  const examDate = parseGuidanceDate(guidanceFields.examDate?.value || "");
-  const hba1c = guidanceFields.hba1c?.value || "";
-  const mealTime = guidanceFields.mealTime?.value || "";
-  const medication = guidanceFields.medication?.value || "";
-  const height = parseDecimal(guidanceFields.height?.value || "");
-  const weight = parseDecimal(guidanceFields.weight?.value || "");
-  const waist = parseDecimal(guidanceFields.waist?.value || "");
+  return evaluateGuidanceValues(getGuidanceFieldValues());
+}
+
+function getGuidanceFieldValues() {
+  return {
+    year: Number(guidanceFields.year?.value || defaultFiscalYear()),
+    sex: guidanceFields.sex?.value || "男性",
+    insurance: guidanceFields.insurance?.value || "",
+    birthDate: guidanceFields.birthDate?.value || "",
+    examDate: guidanceFields.examDate?.value || "",
+    hba1c: guidanceFields.hba1c?.value || "",
+    mealTime: guidanceFields.mealTime?.value || "",
+    medication: guidanceFields.medication?.value || "",
+    height: guidanceFields.height?.value || "",
+    weight: guidanceFields.weight?.value || "",
+    waist: guidanceFields.waist?.value || ""
+  };
+}
+
+function getEntryGuidanceValues() {
+  const data = formToRecord();
+  return {
+    year: defaultFiscalYear(),
+    sex: normalizeGuidanceSex(data["性別名称"]),
+    insurance: guidanceFields.insurance?.value || "はい",
+    birthDate: data["生年月日"] || "",
+    examDate: guidanceFields.examDate?.value || todayGuidanceDateValue(),
+    hba1c: guidanceFields.hba1c?.value || "あり",
+    mealTime: mealTimeBucket(data["空腹時間（時）"], data["空腹時間（分）"]),
+    medication: guidanceFields.medication?.value || "なし",
+    height: data["身長"] || "",
+    weight: data["体重"] || "",
+    waist: data["腹囲"] || ""
+  };
+}
+
+function evaluateGuidanceValues(values) {
+  const year = Number(values.year || defaultFiscalYear());
+  const sex = values.sex || "男性";
+  const insurance = values.insurance || "";
+  const birthDate = parseGuidanceDate(values.birthDate || "");
+  const examDate = parseGuidanceDate(values.examDate || "");
+  const hba1c = values.hba1c || "";
+  const mealTime = values.mealTime || "";
+  const medication = values.medication || "";
+  const height = parseDecimal(values.height || "");
+  const weight = parseDecimal(values.weight || "");
+  const waist = parseDecimal(values.waist || "");
   const ageResult = evaluateGuidanceAge(birthDate, year, examDate);
   const bmi = height && weight ? weight / ((height / 100) ** 2) : null;
   const waistTarget = waist ? (sex === "男性" ? waist >= 85 : waist >= 90) : null;
@@ -738,9 +792,8 @@ function evaluateGuidanceSelection() {
     bmi == null ? "BMI 未入力" : `BMI ${bmi.toFixed(1)}`,
     waist ? `腹囲 ${waist}cm` : "腹囲 未入力"
   ].join(" / ");
-  const ageText = ageResult.fiscalYearEndAge == null
-    ? "未入力"
-    : `年度末 ${ageResult.fiscalYearEndAge}歳 / 受診日 ${ageResult.examAge}歳${ageResult.completionDeadline ? ` / 期限 ${formatJapaneseDate(ageResult.completionDeadline)}` : ""}`;
+  const deadlineText = ageResult.completionDeadline ? ` / 期限 ${formatJapaneseDate(ageResult.completionDeadline)}` : "";
+  const ageText = ageResult.fiscalYearEndAge == null ? "未入力" : `年度末 ${ageResult.fiscalYearEndAge}歳 / 受診日 ${ageResult.examAge}歳${deadlineText}`;
   const items = [
     makeGuidanceItem("保険", insurance === "はい" ? true : insurance === "いいえ" ? false : null, insurance || "未入力", "協会・紙商・水産連合が『はい』なら対象"),
     makeGuidanceItem("年齢・保健指導期限", ageResult.included, ageText, ageResult.reason),
@@ -750,18 +803,11 @@ function evaluateGuidanceSelection() {
   ];
   const hasMissing = items.some((item) => item.status === "pending");
   const hasExcluded = items.some((item) => item.status === "excluded");
-  if (hasExcluded) {
-    return { finalLabel: "指導対象外", finalClass: "excluded", summary: "対象外条件があります", items };
-  }
-  if (hasMissing) {
-    return { finalLabel: "--", finalClass: "pending", summary: "未入力の条件があります", items };
-  }
-  const deadlineLabel = ageResult.examAge === 74 && ageResult.completionDeadline
-    ? `（${formatJapaneseDate(ageResult.completionDeadline)}までに保健指導完了する場合）`
-    : "";
+  if (hasExcluded) return { finalLabel: "指導対象外", finalClass: "excluded", summary: "対象外条件があります", items };
+  if (hasMissing) return { finalLabel: "--", finalClass: "pending", summary: "未入力の条件があります", items };
+  const deadlineLabel = ageResult.examAge === 74 && ageResult.completionDeadline ? `（${formatJapaneseDate(ageResult.completionDeadline)}までに保健指導完了する場合）` : "";
   return { finalLabel: `保健指導あり${deadlineLabel}`, finalClass: deadlineLabel ? "target deadline" : "target", summary: "すべての条件を満たしています", items };
 }
-
 function makeGuidanceItem(label, included, text, detail) {
   if (included == null) return { label, status: "pending", text, detail };
   return { label, status: included ? "target" : "excluded", text: included ? `対象: ${text}` : `対象外: ${text}`, detail };
@@ -1428,6 +1474,7 @@ async function loadEntryForPersonalNumber(personalNumber) {
   resetQuestionnaireForm();
   isDirty = false;
   await updatePatientSummary();
+  updateEntryGuidanceSelection();
 }
 
 function applyEntryRecordToForm(data, options = {}) {
@@ -1448,6 +1495,7 @@ function applyEntryRecordToForm(data, options = {}) {
       });
     }
   });
+  updateEntryGuidanceSelection();
 }
 
 function resetQuestionnaireForm() {

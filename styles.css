@@ -342,8 +342,22 @@ textarea:focus {
 .id-row {
   align-items: end;
   column-gap: 12px;
-  grid-template-columns: max-content max-content max-content max-content max-content max-content max-content max-content 1fr;
+  grid-template-columns: max-content max-content max-content max-content max-content max-content max-content max-content max-content 1fr;
   justify-content: start;
+}
+
+.guidance-badge {
+  align-self: center;
+  color: #c21f12;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 0;
+  min-width: 42px;
+  text-align: center;
+}
+
+.guidance-badge[hidden] {
+  display: none;
 }
 
 .reception-field {
@@ -1113,6 +1127,10 @@ button:disabled {
   background: #ffffff;
   display: grid;
   gap: 10px;
+}
+
+.entry-guidance-result {
+  margin-top: 14px;
 }
 
 .guidance-result > span {
