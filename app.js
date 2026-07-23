@@ -1321,30 +1321,29 @@ async function startNewWalkInRecord() {
   toast("飛び入り受診者の新規入力を開始しました。個人番号と氏名を入力してください。");
 }
 
+
 async function handlePersonalNumberChange(event) {
   event.stopPropagation();
   const input = event.target;
   const newValue = input.value.trim();
   const oldValue = personalValueBeforeEdit;
+  if (oldValue === newValue) {
+    await updatePatientSummary();
+    return;
+  }
   if (document.body.dataset.view === "questionnaire") {
     personalValueBeforeEdit = newValue;
     await updatePatientSummary();
+    if (!isDirty && !hasQuestionnaireInput()) await loadQuestionnaireForCurrentPatient();
     return;
   }
-  if (!oldValue || oldValue === newValue) {
+  if (!oldValue && hasCurrentInput()) {
     personalValueBeforeEdit = newValue;
     await updatePatientSummary();
-    if (document.body.dataset.view === "questionnaire" && !isDirty && !hasQuestionnaireInput()) {
-      await loadQuestionnaireForCurrentPatient();
-    }
     return;
   }
   if (!isDirty || !hasCurrentInput()) {
-    personalValueBeforeEdit = newValue;
-    await updatePatientSummary();
-    if (document.body.dataset.view === "questionnaire") {
-      await loadQuestionnaireForCurrentPatient();
-    }
+    await loadEntryForPersonalNumber(newValue);
     return;
   }
   const shouldSave = window.confirm("未保存の入力があります。移動する前に保存しますか？\n\nOK: 保存して移動\nキャンセル: 保存せずに移動");
@@ -1354,9 +1353,7 @@ async function handlePersonalNumberChange(event) {
     setProgrammaticFormChange(() => {
       input.value = oldValue;
     });
-    const saved = document.body.dataset.view === "questionnaire"
-      ? await saveQuestionnaireRecord({ silent: true })
-      : await saveRecordData(currentData, { silent: true });
+    const saved = await saveRecordData(currentData, { silent: true });
     if (!saved) {
       setProgrammaticFormChange(() => {
         input.value = oldValue;
@@ -1366,13 +1363,7 @@ async function handlePersonalNumberChange(event) {
       return;
     }
   }
-  editingId = null;
-  clearFormForPersonalNumber(newValue);
-  resetQuestionnaireForm();
-  personalValueBeforeEdit = newValue;
-  isDirty = false;
-  await updatePatientSummary();
-  if (document.body.dataset.view === "questionnaire") await loadQuestionnaireForCurrentPatient();
+  await loadEntryForPersonalNumber(newValue);
   toast(shouldSave ? "保存して次の個人番号へ移動しました" : "保存せずに次の個人番号へ移動しました");
 }
 
@@ -1408,6 +1399,48 @@ function clearFormForPersonalNumber(personalNumber) {
         field.value = "";
       }
     });
+  });
+}
+
+
+async function loadEntryForPersonalNumber(personalNumber) {
+  const code = String(personalNumber || "").trim();
+  const record = await findRecordByPatient(code);
+  if (record) {
+    const data = await assembleRecordData(record);
+    applyEntryRecordToForm(data);
+    editingId = record.id;
+    personalValueBeforeEdit = data["個人番号"] || code;
+  } else {
+    const patient = await getPlannedPatient(code);
+    const data = patient ? plannedToData(patient) : { "個人番号": code };
+    clearFormForPersonalNumber(code);
+    applyEntryRecordToForm(data, { reset: false });
+    editingId = null;
+    personalValueBeforeEdit = code;
+  }
+  resetQuestionnaireForm();
+  isDirty = false;
+  await updatePatientSummary();
+}
+
+function applyEntryRecordToForm(data, options = {}) {
+  if (!data) return;
+  if (!data["胸部X線_自由入力"] && data["X線_自由入力"]) {
+    data["胸部X線_自由入力"] = data["X線_自由入力"];
+  }
+  setProgrammaticFormChange(() => {
+    if (options.reset !== false) form.reset();
+    for (const [key, value] of Object.entries(data)) {
+      const fields = Array.from(form.elements).filter((field) => field.name === key);
+      fields.forEach((field) => {
+        if (field.type === "checkbox") {
+          field.checked = field.value === value;
+        } else {
+          field.value = value;
+        }
+      });
+    }
   });
 }
 
@@ -1907,23 +1940,8 @@ async function editRecord(id, targetGroup = "") {
   const record = await getOne(STORE, id);
   if (!record) return;
   const data = await assembleRecordData(record);
-  if (!data["胸部X線_自由入力"] && data["X線_自由入力"]) {
-    data["胸部X線_自由入力"] = data["X線_自由入力"];
-  }
   editingId = id;
-  setProgrammaticFormChange(() => {
-    form.reset();
-    for (const [key, value] of Object.entries(data)) {
-      const fields = Array.from(form.elements).filter((field) => field.name === key);
-      fields.forEach((field) => {
-        if (field.type === "checkbox") {
-          field.checked = field.value === value;
-        } else {
-          field.value = value;
-        }
-      });
-    }
-  });
+  applyEntryRecordToForm(data);
   isDirty = false;
   personalValueBeforeEdit = data["個人番号"] || "";
   await updatePatientSummary();
