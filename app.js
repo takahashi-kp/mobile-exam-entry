@@ -234,6 +234,7 @@ const guidanceChecks = document.querySelector("#guidanceChecks");
 const patientSummary = document.querySelector("#patientSummary");
 const activeGroupLabel = document.querySelector("#activeGroupLabel");
 const identityEditButton = document.querySelector("#editPatientIdentity");
+const patientAgeDisplay = document.querySelector("#patientAgeDisplay");
 let editingId = null;
 let activeGroup = null;
 let db;
@@ -1866,6 +1867,7 @@ async function getPlannedPatient(code) {
 }
 
 async function updatePatientSummary() {
+  updatePatientAgeDisplay();
   updateIdentityEditButton();
 }
 
@@ -1888,6 +1890,13 @@ function updateIdentityEditButton() {
   identityEditButton.textContent = patientIdentityEditable ? "編集中" : "修正";
   identityEditButton.classList.toggle("is-active", patientIdentityEditable);
   identityEditButton.setAttribute("aria-pressed", patientIdentityEditable ? "true" : "false");
+}
+
+function updatePatientAgeDisplay() {
+  if (!patientAgeDisplay) return;
+  const birthValue = form.elements.namedItem("生年月日")?.value || "";
+  const birthDate = parseGuidanceDate(birthValue);
+  patientAgeDisplay.value = birthDate ? String(ageOnDate(birthDate, new Date())) + "歳" : "";
 }
 
 function formatPatientSummary(data) {

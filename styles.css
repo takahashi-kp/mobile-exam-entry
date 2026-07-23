@@ -342,7 +342,7 @@ textarea:focus {
 .id-row {
   align-items: end;
   column-gap: 12px;
-  grid-template-columns: max-content max-content max-content max-content max-content max-content max-content 1fr;
+  grid-template-columns: max-content max-content max-content max-content max-content max-content max-content max-content 1fr;
   justify-content: start;
 }
 
@@ -369,6 +369,10 @@ textarea:focus {
 
 .walkin-sex-input {
   width: 72px;
+}
+
+.walkin-age-input {
+  width: 64px;
 }
 
 .walkin-birth-input {

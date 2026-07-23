@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#176c6a">
   <title>出張健診 検査項目入力</title>
   <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="stylesheet" href="./styles.css?v=20260723-02">
+  <link rel="stylesheet" href="./styles.css?v=20260723-03">
 </head>
 <body>
   <div class="app-toast" id="appToast" role="status" aria-live="polite"></div>
@@ -55,6 +55,10 @@
         <label class="short-field walkin-sex-field identity-field">
           <span>性別</span>
           <input class="walkin-sex-input identity-input" name="性別名称" form="examForm" readonly>
+        </label>
+        <label class="short-field walkin-age-field identity-field">
+          <span>年齢</span>
+          <input class="walkin-age-input identity-input" id="patientAgeDisplay" readonly tabindex="-1">
         </label>
         <label class="short-field walkin-birth-field identity-field">
           <span>生年月日</span>
@@ -492,6 +496,6 @@
     </section>
   </main>
 
-  <script src="./app.js?v=20260723-02" type="module"></script>
+  <script src="./app.js?v=20260723-03" type="module"></script>
 </body>
 </html>
