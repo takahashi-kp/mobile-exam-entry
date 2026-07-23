@@ -136,7 +136,7 @@ const QUESTIONNAIRE_SECTIONS = [
         title: "個人情報の取扱いについて",
         note: "健康診断の目的等を理解した上で、実施主体が指定する者及び健診機関が保健事業、健診精度管理等の目的の範囲内で個人情報を使用することに同意します。",
         items: [
-          { id: "問診_同意", label: "個人情報の取扱いに同意する", type: "checkbox" },
+          { id: "問診_同意", label: "個人情報の取扱いに同意する", type: "checkbox", checkedValue: "同意する" },
           { id: "問診_署名", label: "署名", type: "text" }
         ]
       }
@@ -387,6 +387,7 @@ function renderQuestionnaireControls() {
       const groupEl = document.createElement("div");
       groupEl.className = "questionnaire-group section-block collapsible-group";
       groupEl.dataset.group = `問診_${group.title}`;
+      groupEl.dataset.questionnaireGroupTitle = group.title;
       groupEl.innerHTML = `
         <h2>${escapeHtml(group.title)}</h2>
         ${group.note ? `<p class="questionnaire-note">${escapeHtml(group.note)}</p>` : ""}
@@ -408,9 +409,9 @@ function renderQuestionnaireItem(item) {
   const controls = document.createElement("div");
   controls.className = "question-controls";
   if (item.type === "checkbox") {
-    controls.appendChild(makeQuestionChoice(item.id, "該当", "checkbox"));
+    controls.appendChild(makeQuestionChoice(item.id, item.checkedValue || "該当", "checkbox"));
   } else if (item.type === "checkText") {
-    controls.appendChild(makeQuestionChoice(item.id, "該当", "checkbox"));
+    controls.appendChild(makeQuestionChoice(item.id, item.checkedValue || "該当", "checkbox"));
     controls.appendChild(makeQuestionText(`${item.id}_text`, item.textLabel || "内容"));
   } else if (item.type === "text") {
     controls.appendChild(makeQuestionText(item.id, item.label));
@@ -474,6 +475,7 @@ function bindUi() {
   form.addEventListener("change", markDirtyFromEvent);
   questionnaireForm?.addEventListener("input", markDirtyFromEvent);
   questionnaireForm?.addEventListener("change", markDirtyFromEvent);
+  questionnaireForm?.addEventListener("change", handleQuestionnaireDependencyChange);
   questionnaireForm?.addEventListener("pointerdown", rememberQuestionnaireChoiceState, true);
   questionnaireForm?.addEventListener("click", toggleQuestionnaireChoice, true);
   document.addEventListener("input", markDirtyFromEvent);
@@ -643,6 +645,7 @@ async function switchView(view) {
   if (view === "records") await refreshRows();
   if (view === "schedules") await refreshScheduleRows();
   if (view === "sync") await refreshCleanupSummary();
+  if (view === "questionnaire") await updateQuestionnaireSexRules();
   if (view === "guidance") {
     hydrateGuidanceFromEntry(false);
     updateGuidanceSelection();
@@ -799,6 +802,93 @@ function mealTimeBucket(hoursValue, minutesValue) {
   return total <= 3.5 ? "3.5時間以内" : "3.5時間超";
 }
 
+function handleQuestionnaireDependencyChange(event) {
+  if (event.target?.name === "問診_女性_月経状況") {
+    applyMenopausePregnancyRule();
+  }
+}
+
+async function updateQuestionnaireSexRules() {
+  if (!questionnaireForm) return;
+  const sex = await getCurrentPatientSex();
+  const femaleGroup = getFemaleQuestionnaireGroup();
+  if (!femaleGroup) return;
+  if (isMaleSex(sex)) {
+    clearFemaleQuestionnaireAnswers();
+    femaleGroup.hidden = true;
+    return;
+  }
+  femaleGroup.hidden = false;
+  applyMenopausePregnancyRule();
+}
+
+async function getCurrentPatientSex() {
+  const header = getPatientHeaderData();
+  if (header["性別名称"]) return header["性別名称"];
+  const code = header["個人番号"] || form.elements.namedItem("個人番号")?.value || "";
+  const planned = await getPlannedPatient(code);
+  return planned?.["性別名称"] || "";
+}
+
+function isMaleSex(sex) {
+  const normalized = String(sex || "").trim().toLowerCase();
+  return normalized.includes("男") || normalized === "m" || normalized === "male";
+}
+
+function isFemaleSex(sex) {
+  const normalized = String(sex || "").trim().toLowerCase();
+  return normalized.includes("女") || normalized === "f" || normalized === "female";
+}
+
+function getFemaleQuestionnaireGroup() {
+  return questionnaireForm?.querySelector('[data-questionnaire-group-title="女性の方へ"]');
+}
+
+function clearFemaleQuestionnaireAnswers() {
+  getFemaleQuestionnaireFields().forEach((field) => {
+    if (field.type === "checkbox" || field.type === "radio") {
+      field.checked = false;
+    } else {
+      field.value = "";
+    }
+    field.disabled = false;
+  });
+}
+
+function getFemaleQuestionnaireFields() {
+  return Array.from(getFemaleQuestionnaireGroup()?.querySelectorAll("input[name], select[name], textarea[name]") || []);
+}
+
+function applyMenopausePregnancyRule() {
+  const menstrual = questionnaireForm?.querySelector('[name="問診_女性_月経状況"]');
+  const pregnancy = questionnaireForm?.querySelector('[name="問診_女性_妊娠可能性"]');
+  const pregnancyText = questionnaireForm?.querySelector('[name="問診_女性_妊娠可能性_text"]');
+  if (!menstrual || !pregnancy) return;
+  const isMenopause = menstrual.value === "閉経した";
+  if (isMenopause) {
+    pregnancy.value = "可能性なし";
+    if (pregnancyText) pregnancyText.value = "";
+  }
+  Array.from(pregnancy.options || []).forEach((option) => {
+    option.disabled = isMenopause && option.value !== "" && option.value !== "可能性なし";
+  });
+  pregnancy.disabled = false;
+  if (pregnancyText) pregnancyText.disabled = isMenopause;
+}
+
+function sanitizeQuestionnaireAnswersForSex(answers, sex) {
+  const sanitized = { ...answers };
+  if (isMaleSex(sex)) {
+    Object.keys(sanitized).forEach((key) => {
+      if (key.startsWith("問診_女性_")) delete sanitized[key];
+    });
+  }
+  if (sanitized["問診_女性_月経状況"] === "閉経した") {
+    sanitized["問診_女性_妊娠可能性"] = "可能性なし";
+    delete sanitized["問診_女性_妊娠可能性_text"];
+  }
+  return sanitized;
+}
 async function saveCurrentRecord() {
   if (document.body.dataset.view === "questionnaire") {
     await saveQuestionnaireRecord();
@@ -822,8 +912,9 @@ async function saveQuestionnaireRecord(options = {}) {
     toast("受付番号または個人番号を入力してください。", true);
     return false;
   }
-  const answers = questionnaireToRecord();
-  const validation = validateQuestionnaire(answers);
+  const sex = header["性別名称"] || await getCurrentPatientSex();
+  const answers = sanitizeQuestionnaireAnswersForSex(questionnaireToRecord(), sex);
+  const validation = validateQuestionnaire(answers, sex);
   if (validation) {
     showQuestionnaireError(validation);
     return false;
@@ -855,6 +946,7 @@ async function saveQuestionnaireRecord(options = {}) {
   personalValueBeforeEdit = header["個人番号"] || "";
   if (navigator.onLine) await syncPending();
   applyQuestionnaireAnswers(answers);
+  await updateQuestionnaireSexRules();
   clearQuestionnaireErrors();
   if (!options.silent) toast("保存しました");
   return true;
@@ -897,7 +989,7 @@ function getQuestionnaireFields() {
   return Array.from(questionnaireForm?.querySelectorAll("input[name], select[name], textarea[name]") || []);
 }
 
-function validateQuestionnaire(answers) {
+function validateQuestionnaire(answers, sex = "") {
   const linkedChecks = [
     {
       disease: "問診_病気_高血圧",
@@ -927,6 +1019,26 @@ function validateQuestionnaire(answers) {
     return {
       field: "特定_07_貧血",
       message: "病気についての「貧血」に入力があります。服薬・既往歴の「医師から、貧血といわれたことがありますか」は「はい」を選択してください。"
+    };
+  }
+  if (isFemaleSex(sex)) {
+    if (!answers["問診_女性_月経状況"]) {
+      return {
+        field: "問診_女性_月経状況",
+        message: "女性の場合、「月経の状況」を選択してください。"
+      };
+    }
+    if (!answers["問診_女性_妊娠可能性"]) {
+      return {
+        field: "問診_女性_妊娠可能性",
+        message: "女性の場合、「妊娠の可能性」を選択してください。"
+      };
+    }
+  }
+  if (answers["問診_女性_月経状況"] === "閉経した" && answers["問診_女性_妊娠可能性"] !== "可能性なし") {
+    return {
+      field: "問診_女性_妊娠可能性",
+      message: "「閉経した」を選択した場合、妊娠の可能性は「可能性なし」にしてください。"
     };
   }
   const frequency = answers["特定_18_飲酒頻度"] || "";
@@ -983,6 +1095,7 @@ async function loadQuestionnaireForCurrentPatient(options = {}) {
   const response = await getOne(QUESTIONNAIRE_RESPONSES, questionnaireResponseId(code));
   if (!options.force && (dirtyAtStart || isDirty || hasQuestionnaireInput())) return;
   applyQuestionnaireAnswers(response?.answers || {});
+  await updateQuestionnaireSexRules();
   isDirty = false;
 }
 
@@ -993,12 +1106,15 @@ function applyQuestionnaireAnswers(answers) {
       const fields = getQuestionnaireFields().filter((field) => field.name === key);
       fields.forEach((field) => {
         if (field.type === "checkbox" || field.type === "radio") {
-          field.checked = Array.isArray(value) ? value.includes(field.value) : field.value === value;
+          field.checked = Array.isArray(value)
+            ? value.includes(field.value) || (field.name === "問診_同意" && value.includes("該当") && field.value === "同意する")
+            : field.value === value || (field.name === "問診_同意" && value === "該当" && field.value === "同意する");
         } else {
           field.value = value;
         }
       });
     }
+    applyMenopausePregnancyRule();
   });
 }
 
@@ -1010,6 +1126,7 @@ function clearQuestionnaireForm() {
       field.value = "";
     }
   });
+  applyMenopausePregnancyRule();
 }
 
 async function saveRecordData(data, options = {}) {
@@ -2377,4 +2494,3 @@ function toast(message, isError = false) {
   window.clearTimeout(toast.hideTimer);
   toast.hideTimer = window.setTimeout(() => appToast.classList.remove("visible"), isError ? 7000 : 4000);
 }
-
