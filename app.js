@@ -676,10 +676,10 @@ function normalizeFastingHours() {
 function hydrateGuidanceFromEntry(overwrite = false) {
   if (!guidanceFields.year) return;
   const data = formToRecord();
-  setGuidanceValue(guidanceFields.year, String(defaultFiscalYear()), overwrite);
+  setGuidanceValue(guidanceFields.year, String(activeGroupFiscalYear()), overwrite);
   setGuidanceValue(guidanceFields.sex, normalizeGuidanceSex(data["性別名称"]), overwrite);
   setGuidanceValue(guidanceFields.birthDate, data["生年月日"] || "", overwrite);
-  setGuidanceValue(guidanceFields.examDate, todayGuidanceDateValue(), false);
+  setGuidanceValue(guidanceFields.examDate, activeGroupExamDateValue(), false);
   setGuidanceValue(guidanceFields.height, data["身長"] || "", overwrite);
   setGuidanceValue(guidanceFields.weight, data["体重"] || "", overwrite);
   setGuidanceValue(guidanceFields.waist, data["腹囲"] || "", overwrite);
@@ -741,7 +741,7 @@ function evaluateGuidanceSelection() {
 
 function getGuidanceFieldValues() {
   return {
-    year: Number(guidanceFields.year?.value || defaultFiscalYear()),
+    year: Number(guidanceFields.year?.value || activeGroupFiscalYear()),
     sex: guidanceFields.sex?.value || "男性",
     insurance: guidanceFields.insurance?.value || "",
     birthDate: guidanceFields.birthDate?.value || "",
@@ -758,14 +758,14 @@ function getGuidanceFieldValues() {
 function getEntryGuidanceValues() {
   const data = formToRecord();
   return {
-    year: defaultFiscalYear(),
+    year: activeGroupFiscalYear(),
     sex: normalizeGuidanceSex(data["性別名称"]),
-    insurance: guidanceFields.insurance?.value || "はい",
+    insurance: data["保健指導_保険"] || guidanceFields.insurance?.value || "はい",
     birthDate: data["生年月日"] || "",
-    examDate: guidanceFields.examDate?.value || todayGuidanceDateValue(),
-    hba1c: guidanceFields.hba1c?.value || "あり",
+    examDate: activeGroupExamDateValue(),
+    hba1c: data["保健指導_HbA1c"] || guidanceFields.hba1c?.value || "あり",
     mealTime: mealTimeBucket(data["空腹時間（時）"], data["空腹時間（分）"]),
-    medication: guidanceFields.medication?.value || "なし",
+    medication: data["保健指導_内服"] || guidanceFields.medication?.value || "なし",
     height: data["身長"] || "",
     weight: data["体重"] || "",
     waist: data["腹囲"] || ""
@@ -773,7 +773,7 @@ function getEntryGuidanceValues() {
 }
 
 function evaluateGuidanceValues(values) {
-  const year = Number(values.year || defaultFiscalYear());
+  const year = Number(values.year || activeGroupFiscalYear());
   const sex = values.sex || "男性";
   const insurance = values.insurance || "";
   const birthDate = parseGuidanceDate(values.birthDate || "");
@@ -836,6 +836,19 @@ function todayGuidanceDateValue() {
 function defaultFiscalYear() {
   const now = new Date();
   return now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
+}
+
+function fiscalYearForDate(date) {
+  return date.getMonth() >= 3 ? date.getFullYear() : date.getFullYear() - 1;
+}
+
+function activeGroupFiscalYear() {
+  const scheduledDate = parseGuidanceDate(activeGroup?.scheduledDate || "");
+  return scheduledDate ? fiscalYearForDate(scheduledDate) : defaultFiscalYear();
+}
+
+function activeGroupExamDateValue() {
+  return parseGuidanceDate(activeGroup?.scheduledDate || "") ? activeGroup.scheduledDate : todayGuidanceDateValue();
 }
 
 function normalizeGuidanceSex(value) {
@@ -1221,7 +1234,7 @@ async function saveRecordData(data, options = {}) {
 }
 
 function pickHeaderData(data) {
-  const keys = ["受付番号", "個人番号", "氏名", "カナ氏名", "性別名称", "生年月日", "メモ"];
+  const keys = ["受付番号", "個人番号", "氏名", "カナ氏名", "性別名称", "生年月日", "保健指導_保険", "保健指導_HbA1c", "保健指導_内服", "メモ"];
   return Object.fromEntries(keys.map((key) => [key, data[key] || ""]));
 }
 
@@ -1747,6 +1760,7 @@ async function setActiveGroup(groupId) {
   await put(SETTINGS, { key: "activeScheduleGroupId", value: groupId });
   updateActiveGroupLabel();
   await updatePatientSummary();
+  updateEntryGuidanceSelection();
 }
 
 function updateActiveGroupLabel() {
@@ -1756,6 +1770,7 @@ function updateActiveGroupLabel() {
   const archived = activeGroup?.archivedAt ? " / アーカイブ済み（未保存入力を保持中）" : "";
   activeGroupLabel.textContent = activeGroup ? `予定グループ: ${activeGroup.name}${customer}${scheduledDate}${archived}` : "予定グループ未選択";
   activeGroupLabel.classList.toggle("found", Boolean(activeGroup));
+  updateEntryGuidanceSelection();
 }
 
 async function refreshScheduleRows() {
@@ -1838,6 +1853,7 @@ async function saveScheduleGroupField(groupId, field, value) {
   if (activeGroup?.id === groupId) {
     activeGroup = updated;
     updateActiveGroupLabel();
+    updateEntryGuidanceSelection();
   }
   if (navigator.onLine) await syncPending();
   const labels = { name: "グループ名", customerName: "顧客名", scheduledDate: "予定日" };

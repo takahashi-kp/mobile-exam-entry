@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#176c6a">
   <title>出張健診 検査項目入力</title>
   <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="stylesheet" href="./styles.css?v=20260723-04">
+  <link rel="stylesheet" href="./styles.css?v=20260723-05">
 </head>
 <body>
   <div class="app-toast" id="appToast" role="status" aria-live="polite"></div>
@@ -317,6 +317,33 @@
             </label>
           </div>
 
+          <div class="section-block entry-guidance-inputs">
+            <h2>保健指導条件</h2>
+            <div class="form-grid three entry-guidance-grid">
+              <label>
+                <span>保険</span>
+                <select name="保健指導_保険" form="examForm">
+                  <option value="はい">はい</option>
+                  <option value="いいえ">いいえ</option>
+                </select>
+              </label>
+              <label>
+                <span>HbA1c有無</span>
+                <select name="保健指導_HbA1c" form="examForm">
+                  <option value="あり">あり</option>
+                  <option value="なし">なし</option>
+                </select>
+              </label>
+              <label>
+                <span>内服</span>
+                <select name="保健指導_内服" form="examForm">
+                  <option value="なし">なし</option>
+                  <option value="あり">あり</option>
+                </select>
+              </label>
+            </div>
+          </div>
+
           <div class="section-block guidance-result entry-guidance-result" id="entryGuidanceResultPanel">
             <span>保健指導判定</span>
             <strong id="entryGuidanceResult">--</strong>
@@ -504,6 +531,6 @@
     </section>
   </main>
 
-  <script src="./app.js?v=20260723-04" type="module"></script>
+  <script src="./app.js?v=20260723-05" type="module"></script>
 </body>
 </html>

@@ -1129,6 +1129,18 @@ button:disabled {
   gap: 10px;
 }
 
+.entry-guidance-inputs {
+  margin-top: 14px;
+}
+
+.entry-guidance-inputs h2 {
+  margin-bottom: 10px;
+}
+
+.entry-guidance-grid select {
+  min-height: 42px;
+}
+
 .entry-guidance-result {
   margin-top: 14px;
 }
