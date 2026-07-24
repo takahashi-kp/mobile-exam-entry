@@ -470,9 +470,9 @@ function makeSmokingAmountControls(name, noValue) {
   wrapper.dataset.noValue = noValue;
   wrapper.innerHTML = `
     <span>1日</span>
-    <input class="smoking-count-input" name="${escapeAttribute(`${name}_cigarettesPerDay`)}" inputmode="decimal" aria-label="1日の本数">
+    <input class="smoking-count-input" name="${escapeAttribute(`${name}_cigarettesPerDay`)}" inputmode="numeric" pattern="[0-9]*" data-smoking-numeric aria-label="1日の本数">
     <span>本 ×</span>
-    <input class="smoking-years-input" name="${escapeAttribute(`${name}_years`)}" inputmode="decimal" aria-label="年数">
+    <input class="smoking-years-input" name="${escapeAttribute(`${name}_years`)}" inputmode="numeric" pattern="[0-9]*" data-smoking-numeric aria-label="年数">
     <span>年 =</span>
     <output class="smoking-total" aria-live="polite"></output>
   `;
@@ -480,8 +480,18 @@ function makeSmokingAmountControls(name, noValue) {
 }
 
 function updateSmokingAmountFromEvent(event) {
+  if (event.target?.matches?.("[data-smoking-numeric]")) {
+    sanitizeSmokingNumericInput(event.target);
+  }
   const row = event.target?.closest?.(".question-smokingAmount");
   if (row) updateSmokingAmountRow(row);
+}
+
+function sanitizeSmokingNumericInput(input) {
+  const sanitized = String(input.value || "")
+    .replace(/[０-９]/g, (char) => String(char.charCodeAt(0) - 0xFF10))
+    .replace(/[^0-9]/g, "");
+  if (input.value !== sanitized) input.value = sanitized;
 }
 
 function updateAllSmokingAmountRows() {
