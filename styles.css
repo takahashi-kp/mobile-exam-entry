@@ -1014,6 +1014,35 @@ button:disabled {
   padding: 6px 9px;
 }
 
+.smoking-amount {
+  align-items: center;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.smoking-amount[hidden] {
+  display: none;
+}
+
+.smoking-amount input {
+  max-width: none;
+  width: 72px;
+}
+
+.smoking-total {
+  background: #fff;
+  border: 1px solid #9eaaa6;
+  border-radius: 7px;
+  box-shadow: inset 0 1px 2px rgba(24, 48, 47, .12), 0 1px 0 rgba(255, 255, 255, .9);
+  color: var(--ink);
+  display: inline-flex;
+  font-weight: 700;
+  min-height: 40px;
+  min-width: 86px;
+  padding: 8px 10px;
+}
+
 @media (max-width: 1000px) {
   .form-grid.four,
   .hearing-grid {

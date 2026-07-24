@@ -160,7 +160,7 @@ const QUESTIONNAIRE_SECTIONS = [
       {
         title: "喫煙・運動",
         items: [
-          { id: "特定_08_喫煙", label: "現在、たばこを習慣的に吸っていますか。", type: "radioText", options: ["はい", "以前は吸っていたが最近1か月間は吸っていない", "いいえ"], textLabel: "1日 本数・年数" },
+          { id: "特定_08_喫煙", label: "現在、たばこを習慣的に吸っていますか。", type: "smokingAmount", options: ["はい", "以前は吸っていたが最近1か月間は吸っていない", "いいえ"] },
           { id: "特定_09_体重増加", label: "20歳の時の体重から10kg以上増加していますか。", type: "radio", options: YES_NO_OPTIONS },
           { id: "特定_10_運動習慣", label: "1回30分以上の軽い汗をかく運動を週2日以上、1年以上実施している。", type: "radio", options: YES_NO_OPTIONS },
           { id: "特定_11_身体活動", label: "日常生活で歩行又は同等の身体活動を1日1時間以上実施している。", type: "radio", options: YES_NO_OPTIONS },
@@ -432,6 +432,10 @@ function renderQuestionnaireItem(item) {
   } else if (item.type === "radio" || item.type === "radioText") {
     (item.options || []).forEach((option) => controls.appendChild(makeQuestionChoice(item.id, option, "radio")));
     if (item.type === "radioText") controls.appendChild(makeQuestionText(`${item.id}_text`, item.textLabel || "補足"));
+  } else if (item.type === "smokingAmount") {
+    const options = item.options || [];
+    options.forEach((option) => controls.appendChild(makeQuestionChoice(item.id, option, "radio")));
+    controls.appendChild(makeSmokingAmountControls(item.id, options[options.length - 1] || "いいえ"));
   }
   row.appendChild(controls);
   return row;
@@ -458,6 +462,60 @@ function makeQuestionText(name, placeholder) {
   return input;
 }
 
+function makeSmokingAmountControls(name, noValue) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "smoking-amount";
+  wrapper.hidden = true;
+  wrapper.dataset.questionName = name;
+  wrapper.dataset.noValue = noValue;
+  wrapper.innerHTML = `
+    <span>1日</span>
+    <input class="smoking-count-input" name="${escapeAttribute(`${name}_cigarettesPerDay`)}" inputmode="decimal" aria-label="1日の本数">
+    <span>本 ×</span>
+    <input class="smoking-years-input" name="${escapeAttribute(`${name}_years`)}" inputmode="decimal" aria-label="年数">
+    <span>年 =</span>
+    <output class="smoking-total" aria-live="polite"></output>
+  `;
+  return wrapper;
+}
+
+function updateSmokingAmountFromEvent(event) {
+  const row = event.target?.closest?.(".question-smokingAmount");
+  if (row) updateSmokingAmountRow(row);
+}
+
+function updateAllSmokingAmountRows() {
+  questionnaireForm?.querySelectorAll(".question-smokingAmount").forEach(updateSmokingAmountRow);
+}
+
+function updateSmokingAmountRow(row) {
+  const wrapper = row.querySelector(".smoking-amount");
+  if (!wrapper) return;
+  const name = wrapper.dataset.questionName || "";
+  const selected = row.querySelector(`input[type="radio"][name="${cssEscape(name)}"]:checked`)?.value || "";
+  const shouldShow = Boolean(selected) && selected !== wrapper.dataset.noValue;
+  wrapper.hidden = !shouldShow;
+  const countInput = wrapper.querySelector(".smoking-count-input");
+  const yearsInput = wrapper.querySelector(".smoking-years-input");
+  const total = wrapper.querySelector(".smoking-total");
+  if (!shouldShow) {
+    if (countInput) countInput.value = "";
+    if (yearsInput) yearsInput.value = "";
+    if (total) total.textContent = "";
+    return;
+  }
+  const count = Number(countInput?.value || "");
+  const years = Number(yearsInput?.value || "");
+  total.textContent = Number.isFinite(count) && Number.isFinite(years) && countInput.value && yearsInput.value
+    ? formatSmokingAmountProduct(count * years)
+    : "";
+}
+
+function formatSmokingAmountProduct(value) {
+  if (!Number.isFinite(value)) return "";
+  return String(Math.round(value * 100) / 100).replace(/\.0+$/, "").replace(/(\.\d*[1-9])0+$/, "$1");
+}
+
 function makeCheckGroup(name, options, className) {
   const row = document.createElement("div");
   row.className = className;
@@ -482,6 +540,7 @@ function bindUi() {
   form.addEventListener("input", markDirtyFromEvent);
   form.addEventListener("change", markDirtyFromEvent);
   questionnaireForm?.addEventListener("input", markDirtyFromEvent);
+  questionnaireForm?.addEventListener("input", updateSmokingAmountFromEvent);
   questionnaireForm?.addEventListener("change", markDirtyFromEvent);
   questionnaireForm?.addEventListener("change", handleQuestionnaireDependencyChange);
   questionnaireForm?.addEventListener("pointerdown", rememberQuestionnaireChoiceState, true);
@@ -866,6 +925,7 @@ function mealTimeBucket(hoursValue, minutesValue) {
 }
 
 function handleQuestionnaireDependencyChange(event) {
+  updateSmokingAmountFromEvent(event);
   if (event.target?.name === "問診_女性_月経状況") {
     applyMenopausePregnancyRule();
   }
@@ -1177,6 +1237,7 @@ function applyQuestionnaireAnswers(answers) {
       });
     }
     applyMenopausePregnancyRule();
+    updateAllSmokingAmountRows();
   });
 }
 
@@ -1189,6 +1250,7 @@ function clearQuestionnaireForm() {
     }
   });
   applyMenopausePregnancyRule();
+  updateAllSmokingAmountRows();
 }
 
 async function saveRecordData(data, options = {}) {
