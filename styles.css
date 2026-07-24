@@ -1035,6 +1035,14 @@ button:disabled {
 }
 
 @media (max-width: 640px) {
+  .top-stack {
+    position: static;
+  }
+
+  .patient-sticky {
+    padding: 8px 10px;
+  }
+
   .app-header,
   .patient-sticky,
   .list-head {
@@ -1074,7 +1082,6 @@ button:disabled {
   .form-grid.two,
   .form-grid.three,
   .form-grid.four,
-  .form-grid.id-row,
   .form-grid.vision-grid,
   .form-grid.xray-grid,
   .form-grid.fasting-grid,
@@ -1085,6 +1092,40 @@ button:disabled {
   .hearing-grid .choice-line,
   .short-input {
     grid-template-columns: 1fr;
+  }
+
+  .form-grid.id-row {
+    column-gap: 8px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    row-gap: 8px;
+  }
+
+  .id-row .active-group-label {
+    grid-column: 1 / -1;
+    min-width: 0;
+    white-space: normal;
+  }
+
+  .id-row .guidance-badge {
+    font-size: 18px;
+    min-width: 0;
+    text-align: left;
+  }
+
+  .id-row .short-field,
+  .id-row .reception-field {
+    margin-right: 0;
+    width: 100%;
+  }
+
+  .id-row .reception-input,
+  .id-row .personal-input,
+  .id-row .walkin-name-input,
+  .id-row .walkin-kana-input,
+  .id-row .walkin-sex-input,
+  .id-row .walkin-age-input,
+  .id-row .walkin-birth-input {
+    width: 100%;
   }
 
   .choice {
