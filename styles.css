@@ -240,6 +240,73 @@ button.ghost {
   display: block;
 }
 
+.entry-group-menu {
+  padding: 6px 0 18px;
+}
+
+.entry-group-menu.is-hidden,
+#examForm:not(.is-group-page) {
+  display: none;
+}
+
+.entry-menu-head {
+  margin-bottom: 16px;
+}
+
+.entry-menu-head h2,
+.entry-menu-head p {
+  margin-bottom: 6px;
+}
+
+.entry-menu-head p {
+  color: var(--muted);
+}
+
+.entry-group-buttons {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.entry-group-buttons button {
+  font-size: 16px;
+  font-weight: 700;
+  min-height: 64px;
+}
+
+.entry-group-buttons .diagnosis-menu-button {
+  background: linear-gradient(#eef8f5, #dceee8);
+  border-color: #7caea3;
+}
+
+.entry-group-page-head {
+  align-items: center;
+  display: flex;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.entry-group-page-head h2 {
+  font-size: 19px;
+  margin: 0;
+}
+
+#examForm.is-group-page > .section-block[data-group] {
+  display: none;
+}
+
+#examForm.is-group-page > .section-block[data-group].is-active-entry-group {
+  display: block;
+}
+
+#examForm.is-group-page .section-block[data-group] > h2 .group-toggle {
+  display: none;
+}
+
+body[data-view="entry"][data-entry-mode="menu"] #saveRecord {
+  display: none;
+}
+
 .section-block {
   background: #f8faf8;
   border-bottom: 1px solid var(--line);
@@ -521,6 +588,83 @@ textarea:focus {
 
 .xray-note input {
   width: 100%;
+}
+
+.diagnosis-reference {
+  background: #f5f8f7;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  margin-bottom: 18px;
+  padding: 12px;
+}
+
+.diagnosis-reference-head {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.diagnosis-reference-head h3,
+.diagnosis-reference-grid h3,
+.diagnosis-reference-grid h4 {
+  margin: 0;
+}
+
+.diagnosis-reference-head h3 {
+  font-size: 16px;
+}
+
+.diagnosis-reference-head button {
+  min-height: 30px;
+  padding: 4px 10px;
+}
+
+.diagnosis-reference-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.diagnosis-reference-grid > div {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 10px;
+}
+
+.diagnosis-reference-grid section {
+  border-top: 1px solid var(--line);
+  margin-top: 9px;
+  padding-top: 9px;
+}
+
+.diagnosis-reference-grid dl {
+  margin: 6px 0 0;
+}
+
+.diagnosis-reference-grid dl > div {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(110px, 1fr) minmax(90px, 1fr);
+  padding: 4px 0;
+}
+
+.diagnosis-reference-grid dt {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.diagnosis-reference-grid dd {
+  font-weight: 700;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.empty-reference {
+  color: var(--muted);
+  margin-bottom: 0;
 }
 
 .active-group-label {
@@ -1294,6 +1438,14 @@ button:disabled {
 }
 
 @media (max-width: 760px) {
+  .entry-group-buttons {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .diagnosis-reference-grid {
+    grid-template-columns: 1fr;
+  }
+
   .xray-chest-row {
     grid-template-columns: 1fr;
   }

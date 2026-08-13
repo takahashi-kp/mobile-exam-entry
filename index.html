@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#176c6a">
   <title>出張健診 検査項目入力</title>
   <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="stylesheet" href="./styles.css?v=20260724-02">
+  <link rel="stylesheet" href="./styles.css?v=20260813-01">
 </head>
 <body>
   <div class="app-toast" id="appToast" role="status" aria-live="polite"></div>
@@ -74,10 +74,30 @@
   <main class="shell">
     <section class="workspace">
       <section class="view is-visible" id="entryView">
+        <div class="entry-group-menu" id="entryGroupMenu">
+          <div class="entry-menu-head">
+            <h2>入力する検査を選択</h2>
+            <p>検査グループを選ぶと、その検査だけの入力画面を表示します。</p>
+          </div>
+          <div class="entry-group-buttons">
+            <button type="button" data-entry-group="便区分">便区分</button>
+            <button type="button" data-entry-group="視力">視力</button>
+            <button type="button" data-entry-group="X線">X線</button>
+            <button type="button" data-entry-group="食後">食後時間</button>
+            <button type="button" data-entry-group="尿">尿検査</button>
+            <button type="button" data-entry-group="血圧">血圧</button>
+            <button type="button" data-entry-group="脈">脈</button>
+            <button type="button" data-entry-group="身体">身体計測</button>
+            <button type="button" data-entry-group="聴力">聴力</button>
+            <button class="diagnosis-menu-button" type="button" data-entry-group="診察">巡回診察</button>
+            <button type="button" data-entry-group="保健指導">保健指導判定</button>
+            <button type="button" data-entry-group="メモ">メモ</button>
+          </div>
+        </div>
         <form id="examForm" autocomplete="off">
-          <div class="group-toggle-bar">
-            <button class="ghost" id="openAllGroups" type="button">すべて開く</button>
-            <button class="ghost" id="closeAllGroups" type="button">すべて閉じる</button>
+          <div class="entry-group-page-head">
+            <button class="ghost" id="backToEntryMenu" type="button">検査選択へ戻る</button>
+            <h2 id="entryGroupTitle"></h2>
           </div>
 
           <div class="section-block compact" data-group="便区分">
@@ -298,6 +318,13 @@
 
           <div class="section-block" data-group="診察">
             <h2>巡回診察</h2>
+            <section class="diagnosis-reference" aria-labelledby="diagnosisReferenceTitle">
+              <div class="diagnosis-reference-head">
+                <h3 id="diagnosisReferenceTitle">検査・問診結果（参照用）</h3>
+                <button class="ghost" id="refreshDiagnosisReference" type="button">最新表示</button>
+              </div>
+              <div id="diagnosisReferenceContent"></div>
+            </section>
             <div class="choice-line diagnosis">
               <span class="field-title">巡回診察</span>
               <label class="choice"><input type="checkbox" name="巡回診察" value="異常所見あり" data-exclusive>異常所見あり</label>
@@ -310,14 +337,14 @@
             </label>
           </div>
 
-          <div class="section-block">
+          <div class="section-block" data-group="メモ">
             <label>
               <span>メモ</span>
               <textarea name="メモ" rows="4"></textarea>
             </label>
           </div>
 
-          <div class="section-block entry-guidance-inputs">
+          <div class="section-block entry-guidance-inputs" data-group="保健指導">
             <h2>保健指導条件</h2>
             <div class="form-grid three entry-guidance-grid">
               <label>
@@ -342,13 +369,12 @@
                 </select>
               </label>
             </div>
-          </div>
-
-          <div class="section-block guidance-result entry-guidance-result" id="entryGuidanceResultPanel">
-            <span>保健指導判定</span>
-            <strong id="entryGuidanceResult">--</strong>
-            <p id="entryGuidanceSummary">条件を入力してください</p>
-            <div class="guidance-checks" id="entryGuidanceChecks"></div>
+            <div class="guidance-result entry-guidance-result" id="entryGuidanceResultPanel">
+              <span>保健指導判定</span>
+              <strong id="entryGuidanceResult">--</strong>
+              <p id="entryGuidanceSummary">条件を入力してください</p>
+              <div class="guidance-checks" id="entryGuidanceChecks"></div>
+            </div>
           </div>
         </form>
       </section>
@@ -531,6 +557,6 @@
     </section>
   </main>
 
-  <script src="./app.js?v=20260724-03" type="module"></script>
+  <script src="./app.js?v=20260813-01" type="module"></script>
 </body>
 </html>

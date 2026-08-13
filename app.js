@@ -250,6 +250,7 @@ let syncInProgress = false;
 let pullInProgress = false;
 let lastAutomaticRefreshAt = 0;
 let rosterExportInProgress = false;
+let activeEntryGroup = "";
 const questionnaireChoiceState = new WeakMap();
 
 init();
@@ -261,6 +262,7 @@ async function init() {
   renderFindingControls();
   renderQuestionnaireControls();
   setupCollapsibleGroups();
+  showEntryMenu();
   bindUi();
   await loadSettings();
   await prepareSyncSchemaV2();
@@ -543,7 +545,7 @@ function makeCheckGroup(name, options, className) {
 }
 
 function bindUi() {
-  document.querySelectorAll("[data-view]").forEach((button) => {
+  document.querySelectorAll("button[data-view]").forEach((button) => {
     button.addEventListener("click", () => switchView(button.dataset.view));
   });
   form.addEventListener("change", handleExclusiveCheckboxes);
@@ -567,8 +569,11 @@ function bindUi() {
   });
   document.querySelector("#exportCsv").addEventListener("click", exportCsv);
   document.querySelector("#exportRosters")?.addEventListener("click", exportRosters);
-  document.querySelector("#openAllGroups").addEventListener("click", () => setAllGroupsCollapsed(false));
-  document.querySelector("#closeAllGroups").addEventListener("click", () => setAllGroupsCollapsed(true));
+  document.querySelectorAll("[data-entry-group]").forEach((button) => {
+    button.addEventListener("click", () => openEntryGroup(button.dataset.entryGroup));
+  });
+  document.querySelector("#backToEntryMenu")?.addEventListener("click", showEntryMenu);
+  document.querySelector("#refreshDiagnosisReference")?.addEventListener("click", renderDiagnosisReference);
   document.querySelector("#scheduleCsv").addEventListener("change", importScheduleCsv);
   document.querySelector("#downloadScheduleFormat")?.addEventListener("click", downloadScheduleFormat);
   document.querySelector("#pullSchedules")?.addEventListener("click", () => pullCloud({ schedulesOnly: true }));
@@ -714,7 +719,8 @@ async function switchView(view) {
     await loadQuestionnaireForCurrentPatient({ force: true });
   }
   document.body.dataset.view = view;
-  document.querySelectorAll("[data-view]").forEach((button) => {
+  if (view === "entry") showEntryMenu();
+  document.querySelectorAll("button[data-view]").forEach((button) => {
     button.classList.toggle("is-active", button.dataset.view === view);
   });
   document.querySelectorAll(".view").forEach((panel) => {
@@ -729,6 +735,75 @@ async function switchView(view) {
     hydrateGuidanceFromEntry(false);
     updateGuidanceSelection();
   }
+}
+
+function showEntryMenu() {
+  activeEntryGroup = "";
+  document.body.dataset.entryMode = "menu";
+  document.querySelector("#entryGroupMenu")?.classList.remove("is-hidden");
+  form.classList.remove("is-group-page");
+  form.querySelectorAll(".section-block[data-group]").forEach((section) => {
+    section.classList.remove("is-active-entry-group");
+  });
+}
+
+async function openEntryGroup(groupKey) {
+  const section = form.querySelector(`.section-block[data-group="${cssEscape(groupKey)}"]`);
+  if (!section) return;
+  activeEntryGroup = groupKey;
+  document.body.dataset.entryMode = "group";
+  document.querySelector("#entryGroupMenu")?.classList.add("is-hidden");
+  form.classList.add("is-group-page");
+  form.querySelectorAll(".section-block[data-group]").forEach((item) => {
+    item.classList.toggle("is-active-entry-group", item === section);
+  });
+  setGroupCollapsed(section, false, false);
+  const title = document.querySelector("#entryGroupTitle");
+  const menuButton = document.querySelector(`[data-entry-group="${cssEscape(groupKey)}"]`);
+  if (title) title.textContent = menuButton?.textContent?.trim() || groupKey;
+  if (groupKey === "診察") await renderDiagnosisReference();
+  requestAnimationFrame(() => section.scrollIntoView({ behavior: "smooth", block: "start" }));
+}
+
+async function renderDiagnosisReference() {
+  const container = document.querySelector("#diagnosisReferenceContent");
+  if (!container) return;
+  const data = formToRecord();
+  const examGroups = PROGRESS_GROUPS.filter((group) => group.target !== "診察").map((group) => {
+    const values = group.fields
+      .filter((field) => data[field] !== false && String(data[field] || "").trim())
+      .map((field) => `<div><dt>${escapeHtml(field)}</dt><dd>${escapeHtml(formatReferenceValue(data[field]))}</dd></div>`)
+      .join("");
+    return values ? `<section><h4>${escapeHtml(group.label)}</h4><dl>${values}</dl></section>` : "";
+  }).join("");
+  const code = data["個人番号"] || "";
+  const response = await getOne(QUESTIONNAIRE_RESPONSES, questionnaireResponseId(code));
+  const labels = questionnaireReferenceLabels();
+  const questionnaireValues = Object.entries(response?.answers || {})
+    .filter(([, value]) => Array.isArray(value) ? value.length : String(value || "").trim())
+    .map(([key, value]) => `<div><dt>${escapeHtml(labels.get(key) || key)}</dt><dd>${escapeHtml(formatReferenceValue(value))}</dd></div>`)
+    .join("");
+  container.innerHTML = `
+    <div class="diagnosis-reference-grid">
+      <div><h3>検査結果</h3>${examGroups || '<p class="empty-reference">入力済みの検査結果はありません。</p>'}</div>
+      <div><h3>問診結果</h3>${questionnaireValues ? `<dl class="questionnaire-reference-list">${questionnaireValues}</dl>` : '<p class="empty-reference">保存済みの問診結果はありません。</p>'}</div>
+    </div>
+  `;
+}
+
+function questionnaireReferenceLabels() {
+  const labels = new Map();
+  QUESTIONNAIRE_SECTIONS.forEach((section) => section.groups.forEach((group) => group.items.forEach((item) => {
+    labels.set(item.id, item.label);
+    if (["checkText", "multiCheckText", "selectText", "radioText"].includes(item.type)) {
+      labels.set(`${item.id}_text`, `${item.label}（${item.textLabel || "補足"}）`);
+    }
+  })));
+  return labels;
+}
+
+function formatReferenceValue(value) {
+  return Array.isArray(value) ? value.join("、") : String(value ?? "");
 }
 
 function normalizeFastingHours() {
@@ -2065,8 +2140,8 @@ async function startRecordForPatient(code, targetGroup = "") {
   isDirty = false;
   personalValueBeforeEdit = code || "";
   await updatePatientSummary();
-  switchView("entry");
-  scrollToGroup(targetGroup);
+  await switchView("entry");
+  if (targetGroup) await openEntryGroup(targetGroup);
 }
 
 async function openQuestionnaireFromList(id, code) {
@@ -2103,17 +2178,13 @@ async function editRecord(id, targetGroup = "") {
   personalValueBeforeEdit = data["個人番号"] || "";
   setPatientIdentityEditable(false);
   await updatePatientSummary();
-  switchView("entry");
-  scrollToGroup(targetGroup);
+  await switchView("entry");
+  if (targetGroup) await openEntryGroup(targetGroup);
 }
 
 function scrollToGroup(targetGroup) {
   if (!targetGroup) return;
-  requestAnimationFrame(() => {
-    const section = document.querySelector(`.section-block[data-group="${cssEscape(targetGroup)}"]`);
-    if (section) setGroupCollapsed(section, false);
-    section?.scrollIntoView({ behavior: "smooth", block: "start" });
-  });
+  openEntryGroup(targetGroup);
 }
 
 async function saveSettings() {
