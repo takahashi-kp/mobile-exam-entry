@@ -860,7 +860,7 @@ async function updateEntryVerificationUi() {
   panel.className = `entry-verification-actions state-${state}`;
   badge.className = `verification-badge ${state}`;
   confirmButton.hidden = state !== "draft";
-  registerButton.hidden = state === "confirmed";
+  registerButton.hidden = state === "draft" || state === "confirmed";
   if (state === "dirty") {
     badge.textContent = "未登録変更あり";
     title.textContent = "入力内容はまだ保存されていません";
@@ -869,8 +869,7 @@ async function updateEntryVerificationUi() {
   } else if (state === "draft") {
     badge.textContent = "仮保存・未確定";
     title.textContent = "検査スタッフによる登録済みです";
-    detail.textContent = `${formatVerificationDate(item?.registeredAt || item?.updatedAt)}　利用者確認後に「利用者確認・確定」を押してください。`;
-    registerButton.textContent = "再登録（仮保存）";
+    detail.textContent = `${formatVerificationDate(item?.registeredAt || item?.updatedAt)}　検査結果に間違いがなければ確認を押してください。`;
   } else if (state === "confirmed") {
     badge.textContent = "利用者確認済み・確定";
     title.textContent = "この検査結果は最終確定されています";
@@ -915,8 +914,6 @@ async function confirmActiveEntryGroup() {
     toast("先に「登録（仮保存）」を行ってください。", true);
     return;
   }
-  const confirmed = window.confirm(`${activeEntryGroup}の検査結果について、利用者が相違ないことを確認しましたか？\n\nOKを押すと「利用者確認済み・確定」として保存します。`);
-  if (!confirmed) return;
   const saved = await saveRecordData(formToRecord(), {
     silent: true,
     groupTarget: activeEntryGroup,
@@ -926,7 +923,6 @@ async function confirmActiveEntryGroup() {
   entryGroupDirty = false;
   await updateEntryVerificationUi();
   await updateEntryMenuStatuses();
-  toast(`${activeEntryGroup}を利用者確認済みとして最終確定しました。`);
 }
 
 async function renderDiagnosisReference() {
