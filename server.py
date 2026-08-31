@@ -175,6 +175,7 @@ def merge_payload(existing, incoming):
     """
     if not isinstance(existing, dict):
         existing = {}
+    original_existing = dict(existing)
     merged = dict(existing)
     for key, value in incoming.items():
         old_value = merged.get(key)
@@ -186,6 +187,15 @@ def merge_payload(existing, incoming):
         for field in ("customerName", "scheduledDate", "archivedAt"):
             if field in incoming:
                 merged[field] = incoming[field]
+    if incoming.get("entityType") == "exam_group_value":
+        verification_fields = ("verificationStatus", "verificationUpdatedAt", "registeredAt", "confirmedAt")
+        incoming_stamp = str(incoming.get("verificationUpdatedAt") or "")
+        existing_stamp = str(original_existing.get("verificationUpdatedAt") or "")
+        use_incoming = "verificationStatus" in incoming and (not existing_stamp or not incoming_stamp or incoming_stamp >= existing_stamp)
+        source = incoming if use_incoming else original_existing
+        for field in verification_fields:
+            if field in source:
+                merged[field] = source[field]
     return merged
 
 

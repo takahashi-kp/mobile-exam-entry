@@ -18,7 +18,7 @@ class MergePayloadTests(unittest.TestCase):
         guidance = client.get("/guidance.js")
 
         self.assertEqual(index.status_code, 200)
-        self.assertIn(b"app.js?v=20260813-01", index.data)
+        self.assertIn(b"app.js?v=20260831-02", index.data)
         self.assertIn(b'id="appToast"', index.data)
         self.assertIn(b'id="downloadScheduleFormat"', index.data)
         self.assertIn(b'id="showArchivedSchedules"', index.data)
@@ -38,6 +38,9 @@ class MergePayloadTests(unittest.TestCase):
         self.assertIn('data-entry-group="診察"'.encode(), index.data)
         self.assertIn('data-entry-group="保健指導"'.encode(), index.data)
         self.assertIn(b'id="diagnosisReferenceContent"', index.data)
+        self.assertIn(b'id="entryVerificationActions"', index.data)
+        self.assertIn(b'id="registerEntryGroup"', index.data)
+        self.assertIn(b'id="confirmEntryGroup"', index.data)
         self.assertIn("顧客名".encode(), index.data)
         self.assertEqual(script.status_code, 200)
         self.assertIn(b"syncSchemaV2Reseeded", script.data)
@@ -49,6 +52,8 @@ class MergePayloadTests(unittest.TestCase):
         self.assertIn(b"setupXraySubgroups", script.data)
         self.assertIn(b"openEntryGroup", script.data)
         self.assertIn(b"renderDiagnosisReference", script.data)
+        self.assertIn(b"registerActiveEntryGroup", script.data)
+        self.assertIn(b"confirmActiveEntryGroup", script.data)
         self.assertIn(b'document.querySelectorAll("button[data-view]")', script.data)
         self.assertIn("胸部連名簿を作成しますか？".encode(), script.data)
         self.assertIn("胃部連名簿を作成しますか？".encode(), script.data)
@@ -122,6 +127,44 @@ class MergePayloadTests(unittest.TestCase):
         merged = merge_payload(existing, incoming)
 
         self.assertIs(merged["values"]["塵肺"], False)
+
+    def test_newer_confirmation_state_replaces_draft_and_keeps_empty_confirmed_at(self):
+        existing = {
+            "entityType": "exam_group_value",
+            "verificationStatus": "confirmed",
+            "verificationUpdatedAt": "2026-08-31T10:00:00+00:00",
+            "confirmedAt": "2026-08-31T10:00:00+00:00",
+        }
+        incoming = {
+            "entityType": "exam_group_value",
+            "verificationStatus": "draft",
+            "verificationUpdatedAt": "2026-08-31T11:00:00+00:00",
+            "confirmedAt": "",
+        }
+
+        merged = merge_payload(existing, incoming)
+
+        self.assertEqual(merged["verificationStatus"], "draft")
+        self.assertEqual(merged["confirmedAt"], "")
+
+    def test_older_offline_draft_does_not_undo_newer_confirmation(self):
+        existing = {
+            "entityType": "exam_group_value",
+            "verificationStatus": "confirmed",
+            "verificationUpdatedAt": "2026-08-31T11:00:00+00:00",
+            "confirmedAt": "2026-08-31T11:00:00+00:00",
+        }
+        incoming = {
+            "entityType": "exam_group_value",
+            "verificationStatus": "draft",
+            "verificationUpdatedAt": "2026-08-31T10:00:00+00:00",
+            "confirmedAt": "",
+        }
+
+        merged = merge_payload(existing, incoming)
+
+        self.assertEqual(merged["verificationStatus"], "confirmed")
+        self.assertEqual(merged["confirmedAt"], "2026-08-31T11:00:00+00:00")
 
     def test_old_offline_group_update_does_not_remove_archive(self):
         existing = {"entityType": "schedule_group", "name": "予定", "archivedAt": "2026-07-16T10:00:00Z"}

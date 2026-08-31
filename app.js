@@ -251,6 +251,7 @@ let pullInProgress = false;
 let lastAutomaticRefreshAt = 0;
 let rosterExportInProgress = false;
 let activeEntryGroup = "";
+let entryGroupDirty = false;
 const questionnaireChoiceState = new WeakMap();
 
 init();
@@ -570,9 +571,12 @@ function bindUi() {
   document.querySelector("#exportCsv").addEventListener("click", exportCsv);
   document.querySelector("#exportRosters")?.addEventListener("click", exportRosters);
   document.querySelectorAll("[data-entry-group]").forEach((button) => {
+    button.dataset.entryLabel = button.textContent.trim();
     button.addEventListener("click", () => openEntryGroup(button.dataset.entryGroup));
   });
-  document.querySelector("#backToEntryMenu")?.addEventListener("click", showEntryMenu);
+  document.querySelector("#backToEntryMenu")?.addEventListener("click", returnToEntryMenu);
+  document.querySelector("#registerEntryGroup")?.addEventListener("click", registerActiveEntryGroup);
+  document.querySelector("#confirmEntryGroup")?.addEventListener("click", confirmActiveEntryGroup);
   document.querySelector("#refreshDiagnosisReference")?.addEventListener("click", renderDiagnosisReference);
   document.querySelector("#scheduleCsv").addEventListener("change", importScheduleCsv);
   document.querySelector("#downloadScheduleFormat")?.addEventListener("click", downloadScheduleFormat);
@@ -609,7 +613,13 @@ function markDirtyFromEvent(event) {
   if (!target?.name) return;
   if (target.form !== form && !questionnaireForm?.contains(target)) return;
   isDirty = true;
-  if (target.form === form) updateEntryGuidanceSelection();
+  if (target.form === form) {
+    updateEntryGuidanceSelection();
+    if (activeEntryGroup && target.closest?.(".section-block[data-group]")?.dataset.group === activeEntryGroup) {
+      entryGroupDirty = true;
+      updateEntryVerificationUi();
+    }
+  }
 }
 
 function rememberQuestionnaireChoiceState(event) {
@@ -715,6 +725,11 @@ function handleExclusiveCheckboxes(event) {
 
 async function switchView(view) {
   const currentView = document.body.dataset.view || "entry";
+  if (currentView === "entry" && view !== "entry" && entryGroupDirty && isVerifiableEntryGroup(activeEntryGroup)) {
+    const shouldRegister = window.confirm("この検査には未登録の変更があります。\n登録（仮保存）して画面を移動しますか？");
+    if (!shouldRegister) return false;
+    if (!(await registerActiveEntryGroup({ silent: true }))) return false;
+  }
   if (view === "questionnaire" && currentView !== "questionnaire") {
     await loadQuestionnaireForCurrentPatient({ force: true });
   }
@@ -735,22 +750,35 @@ async function switchView(view) {
     hydrateGuidanceFromEntry(false);
     updateGuidanceSelection();
   }
+  return true;
 }
 
 function showEntryMenu() {
   activeEntryGroup = "";
+  entryGroupDirty = false;
   document.body.dataset.entryMode = "menu";
   document.querySelector("#entryGroupMenu")?.classList.remove("is-hidden");
   form.classList.remove("is-group-page");
   form.querySelectorAll(".section-block[data-group]").forEach((section) => {
     section.classList.remove("is-active-entry-group");
   });
+  updateEntryMenuStatuses();
+}
+
+async function returnToEntryMenu() {
+  if (entryGroupDirty && isVerifiableEntryGroup(activeEntryGroup)) {
+    const shouldRegister = window.confirm("この検査には未登録の変更があります。\n登録（仮保存）して検査選択へ戻りますか？");
+    if (!shouldRegister) return;
+    if (!(await registerActiveEntryGroup({ silent: true }))) return;
+  }
+  showEntryMenu();
 }
 
 async function openEntryGroup(groupKey) {
   const section = form.querySelector(`.section-block[data-group="${cssEscape(groupKey)}"]`);
   if (!section) return;
   activeEntryGroup = groupKey;
+  entryGroupDirty = false;
   document.body.dataset.entryMode = "group";
   document.querySelector("#entryGroupMenu")?.classList.add("is-hidden");
   form.classList.add("is-group-page");
@@ -760,9 +788,145 @@ async function openEntryGroup(groupKey) {
   setGroupCollapsed(section, false, false);
   const title = document.querySelector("#entryGroupTitle");
   const menuButton = document.querySelector(`[data-entry-group="${cssEscape(groupKey)}"]`);
-  if (title) title.textContent = menuButton?.textContent?.trim() || groupKey;
+  if (title) title.textContent = menuButton?.dataset.entryLabel || groupKey;
   if (groupKey === "診察") await renderDiagnosisReference();
+  await updateEntryVerificationUi();
   requestAnimationFrame(() => section.scrollIntoView({ behavior: "smooth", block: "start" }));
+}
+
+function getProgressGroup(groupKey) {
+  return PROGRESS_GROUPS.find((group) => group.target === groupKey) || null;
+}
+
+function isVerifiableEntryGroup(groupKey) {
+  return Boolean(getProgressGroup(groupKey));
+}
+
+async function getCurrentRecord() {
+  if (editingId) return await getOne(STORE, editingId);
+  return await findRecordByPatient(form.elements.namedItem("個人番号")?.value || "");
+}
+
+async function getCurrentGroupValue(groupKey) {
+  const record = await getCurrentRecord();
+  if (!record) return null;
+  const values = await getGroupValuesForRecord(record);
+  return values.find((item) => item.groupKey === groupKey) || null;
+}
+
+function groupVerificationState(item) {
+  if (!item) return "empty";
+  if (item.verificationStatus === "confirmed") return "confirmed";
+  return "draft";
+}
+
+function formatVerificationDate(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString("ja-JP", { year: "numeric", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+async function updateEntryMenuStatuses() {
+  const record = await getCurrentRecord();
+  const groupValues = record ? await getGroupValuesForRecord(record) : [];
+  const byGroup = new Map(groupValues.map((item) => [item.groupKey, item]));
+  document.querySelectorAll("[data-entry-group]").forEach((button) => {
+    const label = button.dataset.entryLabel || button.textContent.trim();
+    if (!isVerifiableEntryGroup(button.dataset.entryGroup)) {
+      button.textContent = label;
+      return;
+    }
+    const state = groupVerificationState(byGroup.get(button.dataset.entryGroup));
+    const statusLabel = state === "confirmed" ? "確定" : state === "draft" ? "仮保存" : "未入力";
+    button.innerHTML = `${escapeHtml(label)}<span class="entry-menu-status ${state}">${statusLabel}</span>`;
+  });
+}
+
+async function updateEntryVerificationUi() {
+  const panel = document.querySelector("#entryVerificationActions");
+  const badge = document.querySelector("#entryVerificationBadge");
+  const title = document.querySelector("#entryVerificationTitle");
+  const detail = document.querySelector("#entryVerificationDetail");
+  const registerButton = document.querySelector("#registerEntryGroup");
+  const confirmButton = document.querySelector("#confirmEntryGroup");
+  if (!panel || !isVerifiableEntryGroup(activeEntryGroup)) {
+    if (panel) panel.hidden = true;
+    return;
+  }
+  panel.hidden = false;
+  const item = await getCurrentGroupValue(activeEntryGroup);
+  const state = entryGroupDirty ? "dirty" : groupVerificationState(item);
+  panel.className = `entry-verification-actions state-${state}`;
+  badge.className = `verification-badge ${state}`;
+  confirmButton.hidden = state !== "draft";
+  registerButton.hidden = state === "confirmed";
+  if (state === "dirty") {
+    badge.textContent = "未登録変更あり";
+    title.textContent = "入力内容はまだ保存されていません";
+    detail.textContent = "検査スタッフが内容を確認し、「登録（仮保存）」を押してください。";
+    registerButton.textContent = "登録（仮保存）";
+  } else if (state === "draft") {
+    badge.textContent = "仮保存・未確定";
+    title.textContent = "検査スタッフによる登録済みです";
+    detail.textContent = `${formatVerificationDate(item?.registeredAt || item?.updatedAt)}　利用者確認後に「利用者確認・確定」を押してください。`;
+    registerButton.textContent = "再登録（仮保存）";
+  } else if (state === "confirmed") {
+    badge.textContent = "利用者確認済み・確定";
+    title.textContent = "この検査結果は最終確定されています";
+    detail.textContent = `${formatVerificationDate(item?.confirmedAt || item?.updatedAt)} に確定しました。変更すると再確認が必要です。`;
+  } else {
+    badge.textContent = "未入力";
+    title.textContent = "この検査結果は未登録です";
+    detail.textContent = "検査結果を入力して「登録（仮保存）」を押してください。";
+    registerButton.textContent = "登録（仮保存）";
+  }
+}
+
+function activeGroupHasValue(data) {
+  const group = getProgressGroup(activeEntryGroup);
+  return group?.fields.some((field) => data[field] !== false && String(data[field] || "").trim());
+}
+
+async function registerActiveEntryGroup(options = {}) {
+  if (!isVerifiableEntryGroup(activeEntryGroup)) return false;
+  normalizeFastingHours();
+  const data = formToRecord();
+  if (!activeGroupHasValue(data)) {
+    toast("この検査の入力値がありません。結果を入力してから登録してください。", true);
+    return false;
+  }
+  const saved = await saveRecordData(data, {
+    silent: true,
+    groupTarget: activeEntryGroup,
+    verificationStatus: "draft"
+  });
+  if (!saved) return false;
+  entryGroupDirty = false;
+  await updateEntryVerificationUi();
+  if (!options.silent) toast(`${activeEntryGroup}を仮保存しました。利用者確認はまだ完了していません。`);
+  return true;
+}
+
+async function confirmActiveEntryGroup() {
+  if (!isVerifiableEntryGroup(activeEntryGroup) || entryGroupDirty) return;
+  const item = await getCurrentGroupValue(activeEntryGroup);
+  if (!item || groupVerificationState(item) !== "draft") {
+    toast("先に「登録（仮保存）」を行ってください。", true);
+    return;
+  }
+  const confirmed = window.confirm(`${activeEntryGroup}の検査結果について、利用者が相違ないことを確認しましたか？\n\nOKを押すと「利用者確認済み・確定」として保存します。`);
+  if (!confirmed) return;
+  const saved = await saveRecordData(formToRecord(), {
+    silent: true,
+    groupTarget: activeEntryGroup,
+    verificationStatus: "confirmed"
+  });
+  if (!saved) return;
+  entryGroupDirty = false;
+  await updateEntryVerificationUi();
+  await updateEntryMenuStatuses();
+  toast(`${activeEntryGroup}を利用者確認済みとして最終確定しました。`);
 }
 
 async function renderDiagnosisReference() {
@@ -1368,7 +1532,7 @@ async function saveRecordData(data, options = {}) {
     data: headerData
   };
   await put(STORE, record);
-  await saveGroupValues(record, data, now);
+  await saveGroupValues(record, data, now, options);
   await saveProgressSummary(record, data, now);
   editingId = record.id;
   isDirty = false;
@@ -1396,10 +1560,13 @@ async function findRecordByPatient(patientCode) {
   }) || null;
 }
 
-async function saveGroupValues(record, data, now) {
+async function saveGroupValues(record, data, now, options = {}) {
   const existingValues = await getGroupValuesForRecord(record);
   const existingByGroup = new Map(existingValues.map((item) => [item.groupKey, item]));
-  for (const group of PROGRESS_GROUPS) {
+  const groups = options.groupTarget
+    ? PROGRESS_GROUPS.filter((group) => group.target === options.groupTarget)
+    : PROGRESS_GROUPS;
+  for (const group of groups) {
     const values = pickFields(data, group.fields);
     const hasValue = Object.values(values).some((value) => value !== false && String(value || "").trim());
     const existing = existingByGroup.get(group.target);
@@ -1421,6 +1588,16 @@ async function saveGroupValues(record, data, now) {
       updatedAt: now,
       syncState: "pending"
     };
+    if (options.verificationStatus) {
+      item.verificationStatus = options.verificationStatus;
+      item.verificationUpdatedAt = now;
+      item.registeredAt = options.verificationStatus === "draft" ? now : existing?.registeredAt || now;
+      item.confirmedAt = options.verificationStatus === "confirmed" ? now : "";
+    } else if (existing) {
+      ["verificationStatus", "verificationUpdatedAt", "registeredAt", "confirmedAt"].forEach((field) => {
+        if (Object.prototype.hasOwnProperty.call(existing, field)) item[field] = existing[field];
+      });
+    }
     await put(EXAM_GROUP_VALUES, item);
   }
 }
@@ -1511,6 +1688,7 @@ function resetForm() {
   editingId = null;
   setProgrammaticFormChange(() => form.reset());
   isDirty = false;
+  entryGroupDirty = false;
   personalValueBeforeEdit = "";
   setPatientIdentityEditable(false);
   updatePatientSummary();
@@ -1525,6 +1703,7 @@ async function startNewWalkInRecord() {
   });
   setPatientIdentityEditable(true);
   isDirty = false;
+  entryGroupDirty = false;
   personalValueBeforeEdit = "";
   await updatePatientSummary();
   await switchView("entry");
@@ -1563,7 +1742,9 @@ async function handlePersonalNumberChange(event) {
     setProgrammaticFormChange(() => {
       input.value = oldValue;
     });
-    const saved = await saveRecordData(currentData, { silent: true });
+    const saved = entryGroupDirty && isVerifiableEntryGroup(activeEntryGroup)
+      ? await registerActiveEntryGroup({ silent: true })
+      : await saveRecordData(currentData, { silent: true });
     if (!saved) {
       setProgrammaticFormChange(() => {
         input.value = oldValue;
@@ -1633,6 +1814,7 @@ async function loadEntryForPersonalNumber(personalNumber) {
   }
   resetQuestionnaireForm();
   isDirty = false;
+  entryGroupDirty = false;
   await updatePatientSummary();
   updateEntryGuidanceSelection();
 }
@@ -1669,9 +1851,11 @@ async function confirmSaveBeforeLeaving() {
     isDirty = false;
     return true;
   }
-  return document.body.dataset.view === "questionnaire"
-    ? await saveQuestionnaireRecord({ silent: true })
-    : await saveRecordData(formToRecord(), { silent: true });
+  if (document.body.dataset.view === "questionnaire") return await saveQuestionnaireRecord({ silent: true });
+  if (entryGroupDirty && isVerifiableEntryGroup(activeEntryGroup)) {
+    return await registerActiveEntryGroup({ silent: true });
+  }
+  return await saveRecordData(formToRecord(), { silent: true });
 }
 
 function setProgrammaticFormChange(callback) {
@@ -1727,10 +1911,14 @@ async function refreshRows() {
   });
   recordRows.innerHTML = "";
   for (const row of rows) {
+    const groupValues = row.record ? await getGroupValuesForRecord(row.record) : [];
+    const groupValuesByKey = new Map(groupValues.map((item) => [item.groupKey, item]));
     const tr = document.createElement("tr");
     const progressCells = PROGRESS_GROUPS.map((group) => {
       const done = group.fields.some((field) => String(row.data?.[field] || "").trim());
-      return `<td><button class="progress-mark ${done ? "done" : "missing"}" data-record="${row.record?.id || ""}" data-code="${escapeAttribute(row.data["個人番号"] || "")}" data-group="${escapeAttribute(group.target)}" type="button">${done ? "済" : "未"}</button></td>`;
+      const verification = done ? groupVerificationState(groupValuesByKey.get(group.target)) : "empty";
+      const label = verification === "confirmed" ? "確定" : verification === "draft" ? "仮" : "未";
+      return `<td><button class="progress-mark ${verification}" data-record="${row.record?.id || ""}" data-code="${escapeAttribute(row.data["個人番号"] || "")}" data-group="${escapeAttribute(group.target)}" type="button">${label}</button></td>`;
     }).join("");
     tr.innerHTML = `
       <td><button class="link-cell" data-open-record="${row.record?.id || ""}" data-code="${escapeAttribute(row.data["個人番号"] || "")}" type="button">${escapeHtml(row.data["受付番号"] || "")}</button></td>
@@ -2138,6 +2326,7 @@ async function startRecordForPatient(code, targetGroup = "") {
     form.elements.namedItem("個人番号").value = code || "";
   });
   isDirty = false;
+  entryGroupDirty = false;
   personalValueBeforeEdit = code || "";
   await updatePatientSummary();
   await switchView("entry");
@@ -2163,6 +2352,7 @@ async function openQuestionnaireFromList(id, code) {
   });
   personalValueBeforeEdit = data["個人番号"] || code || "";
   isDirty = false;
+  entryGroupDirty = false;
   await updatePatientSummary();
   await switchView("questionnaire");
 }
@@ -2175,6 +2365,7 @@ async function editRecord(id, targetGroup = "") {
   editingId = id;
   applyEntryRecordToForm(data);
   isDirty = false;
+  entryGroupDirty = false;
   personalValueBeforeEdit = data["個人番号"] || "";
   setPatientIdentityEditable(false);
   await updatePatientSummary();
@@ -2421,6 +2612,16 @@ function mergeWithoutErasing(base, incoming) {
     } else if (hasSyncValue(value) || !hasSyncValue(oldValue)) {
       merged[key] = value;
     }
+  }
+  if ((incoming?.entityType || base?.entityType) === "exam_group_value") {
+    const incomingTime = Date.parse(incoming?.verificationUpdatedAt || "");
+    const baseTime = Date.parse(base?.verificationUpdatedAt || "");
+    const incomingHasStatus = Object.prototype.hasOwnProperty.call(incoming || {}, "verificationStatus");
+    const useIncoming = incomingHasStatus && (!Number.isFinite(baseTime) || !Number.isFinite(incomingTime) || incomingTime >= baseTime);
+    const source = useIncoming ? incoming : base;
+    ["verificationStatus", "verificationUpdatedAt", "registeredAt", "confirmedAt"].forEach((field) => {
+      if (Object.prototype.hasOwnProperty.call(source || {}, field)) merged[field] = source[field];
+    });
   }
   return merged;
 }

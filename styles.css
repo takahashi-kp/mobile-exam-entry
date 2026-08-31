@@ -307,6 +307,122 @@ body[data-view="entry"][data-entry-mode="menu"] #saveRecord {
   display: none;
 }
 
+body[data-view="entry"][data-entry-mode="group"] #saveRecord {
+  display: none;
+}
+
+.entry-group-buttons button {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.entry-menu-status {
+  border-radius: 999px;
+  font-size: 11px;
+  margin-top: 5px;
+  padding: 2px 8px;
+}
+
+.entry-menu-status.empty {
+  background: #edf0ef;
+  color: var(--muted);
+}
+
+.entry-menu-status.draft {
+  background: #fff1c9;
+  color: #7a5200;
+}
+
+.entry-menu-status.confirmed {
+  background: #dcefe8;
+  color: #126259;
+}
+
+.entry-verification-actions {
+  align-items: center;
+  background: #fff;
+  border: 2px solid var(--line);
+  border-radius: 10px;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  margin: 18px 0 6px;
+  padding: 14px;
+}
+
+.entry-verification-actions[hidden] {
+  display: none;
+}
+
+.entry-verification-actions.state-draft {
+  background: #fffbef;
+  border-color: #d9b95c;
+}
+
+.entry-verification-actions.state-confirmed {
+  background: #eef9f5;
+  border-color: #5b9d90;
+}
+
+.entry-verification-actions.state-dirty {
+  background: #fff4f1;
+  border-color: #d88d7f;
+}
+
+.entry-verification-state {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+}
+
+.entry-verification-state p {
+  color: var(--muted);
+  margin: 3px 0 0;
+}
+
+.verification-badge {
+  border-radius: 999px;
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 7px 11px;
+}
+
+.verification-badge.empty {
+  background: #edf0ef;
+  color: var(--muted);
+}
+
+.verification-badge.draft {
+  background: #f7d978;
+  color: #654400;
+}
+
+.verification-badge.confirmed {
+  background: #278476;
+  color: #fff;
+}
+
+.verification-badge.dirty {
+  background: #b84f3e;
+  color: #fff;
+}
+
+.entry-verification-buttons {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 10px;
+}
+
+.confirm-entry-button {
+  background: linear-gradient(#2c8d7f, #176c6a);
+  border-color: #176c6a;
+  color: #fff;
+  font-weight: 800;
+}
+
 .section-block {
   background: #f8faf8;
   border-bottom: 1px solid var(--line);
@@ -1029,12 +1145,19 @@ button:disabled {
   text-align: center;
 }
 
-.progress-mark.done {
+.progress-mark.done,
+.progress-mark.confirmed {
   background: var(--soft);
   color: var(--accent);
 }
 
-.progress-mark.missing {
+.progress-mark.draft {
+  background: #fff1c9;
+  color: #7a5200;
+}
+
+.progress-mark.missing,
+.progress-mark.empty {
   background: #fde9ee;
   color: #9a4d62;
 }
@@ -1444,6 +1567,17 @@ button:disabled {
 
   .diagnosis-reference-grid {
     grid-template-columns: 1fr;
+  }
+
+  .entry-verification-actions,
+  .entry-verification-state,
+  .entry-verification-buttons {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .entry-verification-buttons button {
+    width: 100%;
   }
 
   .xray-chest-row {
