@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#176c6a">
   <title>出張健診 検査項目入力</title>
   <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="stylesheet" href="./styles.css?v=20260831-03">
+  <link rel="stylesheet" href="./styles.css?v=20260902-08">
 </head>
 <body>
   <div class="app-toast" id="appToast" role="status" aria-live="polite"></div>
@@ -89,6 +89,7 @@
             <button type="button" data-entry-group="脈">脈</button>
             <button type="button" data-entry-group="身体">身体計測</button>
             <button type="button" data-entry-group="聴力">聴力</button>
+            <button class="blood-menu-button" type="button" data-entry-group="採血">採血</button>
             <button class="diagnosis-menu-button" type="button" data-entry-group="診察">巡回診察</button>
             <button type="button" data-entry-group="保健指導">保健指導判定</button>
             <button type="button" data-entry-group="メモ">メモ</button>
@@ -316,6 +317,25 @@
             </label>
           </div>
 
+          <div class="section-block blood-section" data-group="採血">
+            <h2>採血</h2>
+            <p class="blood-instruction">採血管のバーコードを1本ずつ読み取って、個人番号と氏名を確認してください。</p>
+            <label class="blood-barcode-field">
+              <span>採血管バーコード</span>
+              <input id="bloodTubeBarcode" inputmode="numeric" autocomplete="off" maxlength="64" placeholder="バーコードを読み取ってEnter">
+            </label>
+            <div class="blood-barcode-error" id="bloodBarcodeError" role="alert" hidden>エラー　番号が一致しません</div>
+            <div class="blood-scan-head">
+              <strong id="bloodScanCount">読取 0本</strong>
+              <button class="ghost mini-button" id="clearBloodScans" type="button" hidden>読取履歴をクリア</button>
+            </div>
+            <div class="blood-scan-list" id="bloodScanRows" aria-live="polite">
+              <p class="blood-scan-empty">まだ読み取っていません。</p>
+            </div>
+            <input type="hidden" name="採血管バーコード履歴">
+            <input type="hidden" name="採血確認">
+          </div>
+
           <div class="section-block" data-group="診察">
             <h2>巡回診察</h2>
             <section class="diagnosis-reference" aria-labelledby="diagnosisReferenceTitle">
@@ -414,6 +434,7 @@
                 <th>脈</th>
                 <th>身体</th>
                 <th>聴力</th>
+                <th>採血</th>
                 <th>診察</th>
                 <th>問診</th>
                 <th>同期</th>
@@ -571,6 +592,6 @@
     </section>
   </main>
 
-  <script src="./app.js?v=20260831-03" type="module"></script>
+  <script src="./app.js?v=20260902-08" type="module"></script>
 </body>
 </html>

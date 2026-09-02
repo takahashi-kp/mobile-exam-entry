@@ -279,6 +279,11 @@ button.ghost {
   border-color: #7caea3;
 }
 
+.entry-group-buttons .blood-menu-button {
+  background: linear-gradient(#fff5f6, #f8e3e6);
+  border-color: #c998a0;
+}
+
 .entry-group-page-head {
   align-items: center;
   display: flex;
@@ -421,6 +426,104 @@ body[data-view="entry"][data-entry-mode="group"] #saveRecord {
   border-color: #176c6a;
   color: #fff;
   font-weight: 800;
+}
+
+.blood-section {
+  min-height: 340px;
+}
+
+.blood-instruction {
+  color: var(--muted);
+  margin: 0 0 14px;
+}
+
+.blood-barcode-field {
+  display: block;
+  max-width: 520px;
+}
+
+.blood-barcode-field input {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: .04em;
+}
+
+.blood-barcode-error {
+  background: #b63b3b;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 17px;
+  font-weight: 800;
+  margin-top: 12px;
+  max-width: 520px;
+  padding: 12px 14px;
+}
+
+.blood-scan-head {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-top: 18px;
+  max-width: 720px;
+}
+
+.blood-scan-list {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin-top: 8px;
+  max-width: 720px;
+  overflow: hidden;
+}
+
+.blood-scan-empty {
+  color: var(--muted);
+  margin: 0;
+  padding: 14px;
+}
+
+.blood-scan-row {
+  align-items: center;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 42px minmax(120px, 1fr) minmax(120px, 1fr) auto;
+  padding: 11px 14px;
+}
+
+.blood-scan-row + .blood-scan-row {
+  border-top: 1px solid var(--line);
+}
+
+.blood-scan-row.mismatch {
+  background: #fff0f0;
+  color: #8f2525;
+}
+
+.blood-scan-number {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.blood-scan-code,
+.blood-scan-name {
+  font-weight: 700;
+}
+
+.blood-scan-result {
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 4px 8px;
+}
+
+.blood-scan-row.matched .blood-scan-result {
+  background: #dcefe8;
+  color: #126259;
+}
+
+.blood-scan-row.mismatch .blood-scan-result {
+  background: #f3cccc;
+  color: #8f2525;
 }
 
 .section-block {
@@ -1578,6 +1681,15 @@ button:disabled {
 
   .entry-verification-buttons button {
     width: 100%;
+  }
+
+  .blood-scan-row {
+    grid-template-columns: 42px 1fr auto;
+  }
+
+  .blood-scan-name {
+    grid-column: 2 / -1;
+    grid-row: 2;
   }
 
   .xray-chest-row {
