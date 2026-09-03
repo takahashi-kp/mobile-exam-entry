@@ -741,8 +741,11 @@ async function switchView(view) {
   const currentView = document.body.dataset.view || "entry";
   if (currentView === "entry" && view !== "entry" && entryGroupDirty && isVerifiableEntryGroup(activeEntryGroup)) {
     const shouldRegister = window.confirm("この検査には未登録の変更があります。\n登録（仮保存）して画面を移動しますか？");
-    if (!shouldRegister) return false;
-    if (!(await registerActiveEntryGroup({ silent: true }))) return false;
+    if (shouldRegister) {
+      if (!(await registerActiveEntryGroup({ silent: true }))) return false;
+    } else {
+      discardCurrentUnsavedInput();
+    }
   }
   if (view === "questionnaire" && currentView !== "questionnaire") {
     await loadQuestionnaireForCurrentPatient({ force: true });
@@ -782,8 +785,11 @@ function showEntryMenu() {
 async function returnToEntryMenu() {
   if (entryGroupDirty && isVerifiableEntryGroup(activeEntryGroup)) {
     const shouldRegister = window.confirm("この検査には未登録の変更があります。\n登録（仮保存）して検査選択へ戻りますか？");
-    if (!shouldRegister) return;
-    if (!(await registerActiveEntryGroup({ silent: true }))) return;
+    if (shouldRegister) {
+      if (!(await registerActiveEntryGroup({ silent: true }))) return;
+    } else {
+      discardCurrentUnsavedInput();
+    }
   }
   showEntryMenu();
 }
@@ -2094,7 +2100,7 @@ async function confirmSaveBeforeLeaving() {
   if (!isDirty || !hasCurrentInput()) return true;
   const shouldSave = window.confirm("未保存の入力があります。移動する前に保存しますか？\n\nOK: 保存\nキャンセル: 保存せずに移動");
   if (!shouldSave) {
-    isDirty = false;
+    discardCurrentUnsavedInput();
     return true;
   }
   if (document.body.dataset.view === "questionnaire") return await saveQuestionnaireRecord({ silent: true });
@@ -2102,6 +2108,31 @@ async function confirmSaveBeforeLeaving() {
     return await registerActiveEntryGroup({ silent: true });
   }
   return await saveRecordData(formToRecord(), { silent: true });
+}
+
+function discardCurrentUnsavedInput() {
+  if (document.body.dataset.view === "questionnaire") {
+    resetQuestionnaireForm();
+  } else {
+    clearEntryFormKeepingPatient();
+  }
+  isDirty = false;
+  entryGroupDirty = false;
+}
+
+function clearEntryFormKeepingPatient() {
+  const patientFields = new Set(["受付番号", "個人番号", "氏名", "カナ氏名", "性別名称", "生年月日"]);
+  setProgrammaticFormChange(() => {
+    Array.from(form.elements).forEach((field) => {
+      if (!field.name || patientFields.has(field.name)) return;
+      if (field.type === "checkbox" || field.type === "radio") {
+        field.checked = false;
+      } else {
+        field.value = "";
+      }
+    });
+  });
+  updateEntryGuidanceSelection();
 }
 
 function setProgrammaticFormChange(callback) {
