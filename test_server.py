@@ -18,7 +18,7 @@ class MergePayloadTests(unittest.TestCase):
         guidance = client.get("/guidance.js")
 
         self.assertEqual(index.status_code, 200)
-        self.assertIn(b"app.js?v=20260903-01", index.data)
+        self.assertIn(b"app.js?v=20260903-02", index.data)
         self.assertIn(b'id="appToast"', index.data)
         self.assertIn(b'id="downloadScheduleFormat"', index.data)
         self.assertIn(b'id="showArchivedSchedules"', index.data)
@@ -39,8 +39,6 @@ class MergePayloadTests(unittest.TestCase):
         self.assertIn('data-entry-group="保健指導"'.encode(), index.data)
         self.assertIn('data-entry-group="採血"'.encode(), index.data)
         self.assertIn(b'id="bloodTubeBarcode"', index.data)
-        self.assertIn(b'id="bloodScanRows"', index.data)
-        self.assertIn('name="採血管バーコード履歴"'.encode(), index.data)
         self.assertIn('name="採血確認"'.encode(), index.data)
         self.assertIn(b'id="diagnosisReferenceContent"', index.data)
         self.assertIn(b'id="entryVerificationActions"', index.data)

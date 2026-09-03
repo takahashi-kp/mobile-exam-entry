@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#176c6a">
   <title>出張健診 検査項目入力</title>
   <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="stylesheet" href="./styles.css?v=20260902-08">
+  <link rel="stylesheet" href="./styles.css?v=20260903-02">
 </head>
 <body>
   <div class="app-toast" id="appToast" role="status" aria-live="polite"></div>
@@ -325,14 +325,6 @@
               <input id="bloodTubeBarcode" inputmode="numeric" autocomplete="off" maxlength="64" placeholder="バーコードを読み取ってEnter">
             </label>
             <div class="blood-barcode-error" id="bloodBarcodeError" role="alert" hidden>エラー　番号が一致しません</div>
-            <div class="blood-scan-head">
-              <strong id="bloodScanCount">読取 0本</strong>
-              <button class="ghost mini-button" id="clearBloodScans" type="button" hidden>読取履歴をクリア</button>
-            </div>
-            <div class="blood-scan-list" id="bloodScanRows" aria-live="polite">
-              <p class="blood-scan-empty">まだ読み取っていません。</p>
-            </div>
-            <input type="hidden" name="採血管バーコード履歴">
             <input type="hidden" name="採血確認">
           </div>
 
@@ -592,6 +584,6 @@
     </section>
   </main>
 
-  <script src="./app.js?v=20260903-01" type="module"></script>
+  <script src="./app.js?v=20260903-02" type="module"></script>
 </body>
 </html>

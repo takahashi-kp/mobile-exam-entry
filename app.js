@@ -200,7 +200,7 @@ const PROGRESS_GROUPS = [
   { label: "脈", target: "脈", fields: ["脈拍", "脈_自由入力"] },
   { label: "身体", target: "身体", fields: ["身長", "体重", "腹囲", "身体計測_自由入力"] },
   { label: "聴力", target: "聴力", fields: ["聴力(右)1000Hz", "聴力(左)1000Hz", "聴力(右)4000Hz", "聴力(左)4000Hz", "聴力_自由入力"] },
-  { label: "採血", target: "採血", fields: ["採血確認", "採血管バーコード履歴"] },
+  { label: "採血", target: "採血", fields: ["採血確認"] },
   { label: "診察", target: "診察", fields: ["巡回診察", "結膜貧血", "甲状腺腫大", "心雑音", "脈の異常", "呼吸音異常", "その他", "その他_自由入力", "巡回診察_自由入力"] }
 ];
 
@@ -242,9 +242,6 @@ const identityEditButton = document.querySelector("#editPatientIdentity");
 const patientAgeDisplay = document.querySelector("#patientAgeDisplay");
 const bloodTubeBarcode = document.querySelector("#bloodTubeBarcode");
 const bloodBarcodeError = document.querySelector("#bloodBarcodeError");
-const bloodScanRows = document.querySelector("#bloodScanRows");
-const bloodScanCount = document.querySelector("#bloodScanCount");
-const clearBloodScansButton = document.querySelector("#clearBloodScans");
 let editingId = null;
 let activeGroup = null;
 let db;
@@ -586,7 +583,6 @@ function bindUi() {
   document.querySelector("#registerEntryGroup")?.addEventListener("click", registerActiveEntryGroup);
   document.querySelector("#confirmEntryGroup")?.addEventListener("click", confirmActiveEntryGroup);
   bloodTubeBarcode?.addEventListener("keydown", handleBloodTubeBarcodeKeydown);
-  clearBloodScansButton?.addEventListener("click", clearBloodScanHistory);
   document.querySelector("#refreshDiagnosisReference")?.addEventListener("click", renderDiagnosisReference);
   document.querySelector("#scheduleCsv").addEventListener("change", importScheduleCsv);
   document.querySelector("#downloadScheduleFormat")?.addEventListener("click", downloadScheduleFormat);
@@ -810,7 +806,7 @@ async function openEntryGroup(groupKey) {
   const menuButton = document.querySelector(`[data-entry-group="${cssEscape(groupKey)}"]`);
   if (title) title.textContent = menuButton?.dataset.entryLabel || groupKey;
   if (groupKey === "診察") await renderDiagnosisReference();
-  if (groupKey === "採血") renderBloodScanHistory();
+  if (groupKey === "採血") renderBloodScanStatus();
   await updateEntryVerificationUi();
   requestAnimationFrame(() => {
     section.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -840,7 +836,7 @@ async function getCurrentGroupValue(groupKey) {
 
 function groupVerificationState(item) {
   if (!item) return "empty";
-  if (item.groupKey === "採血" && !String(item.values?.["採血確認"] || "").trim() && !String(item.values?.["採血管バーコード履歴"] || "").trim()) return "empty";
+  if (item.groupKey === "採血" && !String(item.values?.["採血確認"] || "").trim()) return "empty";
   if (item.verificationStatus === "confirmed") return "confirmed";
   return "draft";
 }
@@ -883,34 +879,34 @@ async function updateEntryVerificationUi() {
   const item = await getCurrentGroupValue(activeEntryGroup);
   const state = entryGroupDirty ? "dirty" : groupVerificationState(item);
   const isBlood = activeEntryGroup === "採血";
-  const bloodHistory = isBlood ? getBloodScanHistory() : [];
-  const bloodReady = isBlood && bloodHistory.length > 0 && bloodHistory.every((scan) => scan.matched !== false);
+  const isDiagnosis = activeEntryGroup === "診察";
+  const bloodReady = isBlood && String(form.elements.namedItem("採血確認")?.value || item?.values?.["採血確認"] || "").trim() === "済";
   panel.className = `entry-verification-actions state-${state}`;
   badge.className = `verification-badge ${state}`;
-  confirmButton.hidden = state !== "draft" || (isBlood && !bloodReady);
+  confirmButton.hidden = isDiagnosis || state !== "draft" || (isBlood && !bloodReady);
   registerButton.hidden = isBlood || state === "draft" || state === "confirmed";
   if (state === "dirty") {
     badge.textContent = "未登録変更あり";
     title.textContent = "入力内容はまだ保存されていません";
-    detail.textContent = "検査スタッフが内容を確認し、「登録（仮保存）」を押してください。";
-    registerButton.textContent = "登録（仮保存）";
+    detail.textContent = isDiagnosis ? "診察内容を入力し、「登録（確定）」を押してください。" : "検査スタッフが内容を確認し、「登録（仮保存）」を押してください。";
+    registerButton.textContent = isDiagnosis ? "登録（確定）" : "登録（仮保存）";
   } else if (state === "draft") {
     badge.textContent = "仮保存・未確定";
     title.textContent = "検査スタッフによる登録済みです";
     detail.textContent = isBlood && !bloodReady
-      ? "番号不一致の読取があります。履歴をクリアして、正しい採血管を読み取ってください。"
+      ? "採血管バーコードを読み取って、個人番号と一致することを確認してください。"
       : `${formatVerificationDate(item?.registeredAt || item?.updatedAt)}　検査結果に間違いがなければ確認を押してください。`;
   } else if (state === "confirmed") {
-    badge.textContent = "利用者確認済み・確定";
+    badge.textContent = isDiagnosis ? "登録済み・確定" : "利用者確認済み・確定";
     title.textContent = "この検査結果は最終確定されています";
     detail.textContent = `${formatVerificationDate(item?.confirmedAt || item?.updatedAt)} に確定しました。変更すると再確認が必要です。`;
   } else {
     badge.textContent = "未入力";
     title.textContent = "この検査結果は未登録です";
     detail.textContent = isBlood
-      ? "採血管のバーコードを読み取ってください。読み取るたびに端末内へ仮保存します。"
-      : "検査結果を入力して「登録（仮保存）」を押してください。";
-    registerButton.textContent = "登録（仮保存）";
+      ? "採血管のバーコードを読み取ってください。一致したら仮保存します。"
+      : isDiagnosis ? "診察内容を入力して「登録（確定）」を押してください。" : "検査結果を入力して「登録（仮保存）」を押してください。";
+    registerButton.textContent = isDiagnosis ? "登録（確定）" : "登録（仮保存）";
   }
 }
 
@@ -927,15 +923,17 @@ async function registerActiveEntryGroup(options = {}) {
     toast("この検査の入力値がありません。結果を入力してから登録してください。", true);
     return false;
   }
+  const verificationStatus = activeEntryGroup === "診察" ? "confirmed" : "draft";
   const saved = await saveRecordData(data, {
     silent: true,
     groupTarget: activeEntryGroup,
-    verificationStatus: "draft"
+    verificationStatus
   });
   if (!saved) return false;
   entryGroupDirty = false;
   await updateEntryVerificationUi();
-  if (!options.silent) toast(`${activeEntryGroup}を仮保存しました。利用者確認はまだ完了していません。`);
+  await updateEntryMenuStatuses();
+  if (!options.silent) toast(activeEntryGroup === "診察" ? "診察を確定しました。" : `${activeEntryGroup}を仮保存しました。利用者確認はまだ完了していません。`);
   return true;
 }
 
@@ -948,15 +946,10 @@ async function confirmActiveEntryGroup() {
   }
   const data = formToRecord();
   if (activeEntryGroup === "採血") {
-    const history = getBloodScanHistory();
-    if (!history.length || history.some((scan) => scan.matched === false)) {
+    if (String(data["採血確認"] || "").trim() !== "済") {
       showBloodBarcodeError("エラー　番号が一致しません");
       return;
     }
-    data["採血確認"] = "済";
-    setProgrammaticFormChange(() => {
-      form.elements.namedItem("採血確認").value = "済";
-    });
     await assignReceptionNumberIfEmpty(data);
   }
   const saved = await saveRecordData(data, {
@@ -990,22 +983,25 @@ async function processBloodTubeBarcode(scannedCode) {
     await loadEntryForPersonalNumber(scannedCode);
     openCode = String(form.elements.namedItem("個人番号")?.value || "").trim();
   }
-  const identity = await resolvePatientIdentity(scannedCode);
   const matched = Boolean(openCode) && scannedCode === openCode;
-  const history = getBloodScanHistory();
-  history.push({
-    code: scannedCode,
-    name: identity.name,
-    matched,
-    readAt: new Date().toISOString()
-  });
+  if (!matched) {
+    setProgrammaticFormChange(() => {
+      form.elements.namedItem("採血確認").value = "";
+    });
+    renderBloodScanStatus();
+    showBloodBarcodeError("エラー　番号が一致しません");
+    await updateEntryVerificationUi();
+    requestAnimationFrame(() => bloodTubeBarcode?.focus());
+    return;
+  }
+  const data = formToRecord();
+  data["採血確認"] = "済";
   setProgrammaticFormChange(() => {
-    form.elements.namedItem("採血管バーコード履歴").value = JSON.stringify(history);
-    form.elements.namedItem("採血確認").value = "";
+    form.elements.namedItem("採血確認").value = "済";
   });
-  renderBloodScanHistory();
-  if (!matched) showBloodBarcodeError("エラー　番号が一致しません");
-  const saved = await saveRecordData(formToRecord(), {
+  if (bloodBarcodeError) bloodBarcodeError.hidden = true;
+  await assignReceptionNumberIfEmpty(data);
+  const saved = await saveRecordData(data, {
     silent: true,
     groupTarget: "採血",
     verificationStatus: "draft"
@@ -1018,70 +1014,16 @@ async function processBloodTubeBarcode(scannedCode) {
   requestAnimationFrame(() => bloodTubeBarcode?.focus());
 }
 
-async function resolvePatientIdentity(code) {
-  const patient = await getPlannedPatient(code);
-  if (patient) return { name: patient["氏名"] || patient["カナ氏名"] || "氏名未登録" };
-  const record = await findRecordByPatient(code);
-  if (record) {
-    const data = await assembleRecordData(record);
-    return { name: data["氏名"] || data["カナ氏名"] || "氏名未登録" };
+function renderBloodScanStatus() {
+  if (String(form.elements.namedItem("採血確認")?.value || "").trim() === "済" && bloodBarcodeError) {
+    bloodBarcodeError.hidden = true;
   }
-  return { name: "氏名未登録" };
-}
-
-function getBloodScanHistory() {
-  const raw = String(form.elements.namedItem("採血管バーコード履歴")?.value || "").trim();
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((item) => item && typeof item === "object") : [];
-  } catch {
-    return [];
-  }
-}
-
-function renderBloodScanHistory() {
-  if (!bloodScanRows || !bloodScanCount || !clearBloodScansButton) return;
-  const history = getBloodScanHistory();
-  const hasMismatch = history.some((scan) => scan.matched === false);
-  bloodScanCount.textContent = `読取 ${history.length}本`;
-  clearBloodScansButton.hidden = history.length === 0;
-  if (bloodBarcodeError) bloodBarcodeError.hidden = !hasMismatch;
-  bloodScanRows.innerHTML = history.length
-    ? history.map((scan, index) => `
-      <div class="blood-scan-row ${scan.matched === false ? "mismatch" : "matched"}">
-        <span class="blood-scan-number">${index + 1}本目</span>
-        <span class="blood-scan-code">${escapeHtml(scan.code || "")}</span>
-        <span class="blood-scan-name">${escapeHtml(scan.name || "氏名未登録")}</span>
-        <span class="blood-scan-result">${scan.matched === false ? "不一致" : "一致"}</span>
-      </div>
-    `).join("")
-    : '<p class="blood-scan-empty">まだ読み取っていません。</p>';
 }
 
 function showBloodBarcodeError(message) {
   if (!bloodBarcodeError) return;
   bloodBarcodeError.textContent = message;
   bloodBarcodeError.hidden = false;
-}
-
-async function clearBloodScanHistory() {
-  setProgrammaticFormChange(() => {
-    form.elements.namedItem("採血管バーコード履歴").value = "";
-    form.elements.namedItem("採血確認").value = "";
-  });
-  renderBloodScanHistory();
-  const code = String(form.elements.namedItem("個人番号")?.value || "").trim();
-  if (code) {
-    await saveRecordData(formToRecord(), {
-      silent: true,
-      groupTarget: "採血",
-      verificationStatus: "draft"
-    });
-  }
-  await updateEntryVerificationUi();
-  await updateEntryMenuStatuses();
-  bloodTubeBarcode?.focus();
 }
 
 async function assignReceptionNumberIfEmpty(data) {
@@ -1874,7 +1816,7 @@ function resetForm() {
   entryGroupDirty = false;
   personalValueBeforeEdit = "";
   setPatientIdentityEditable(false);
-  renderBloodScanHistory();
+  renderBloodScanStatus();
   updatePatientSummary();
   toast("新規入力に切り替えました");
 }
@@ -1889,7 +1831,7 @@ async function startNewWalkInRecord() {
   isDirty = false;
   entryGroupDirty = false;
   personalValueBeforeEdit = "";
-  renderBloodScanHistory();
+  renderBloodScanStatus();
   await updatePatientSummary();
   await switchView("entry");
   form.elements.namedItem("個人番号")?.focus();
@@ -1913,10 +1855,9 @@ function handlePersonalNumberInput(event) {
   const nextCode = String(event.target.value || "").trim();
   if (nextCode === personalValueBeforeEdit) return;
   setProgrammaticFormChange(() => {
-    form.elements.namedItem("採血管バーコード履歴").value = "";
     form.elements.namedItem("採血確認").value = "";
   });
-  renderBloodScanHistory();
+  renderBloodScanStatus();
 }
 
 function queuePersonalNumberChange(event) {
@@ -1932,7 +1873,7 @@ function queuePersonalNumberChange(event) {
 
 function scheduleBloodPatientRefresh() {
   requestAnimationFrame(() => {
-    renderBloodScanHistory();
+    renderBloodScanStatus();
     bloodTubeBarcode?.focus();
   });
 }
@@ -1944,7 +1885,7 @@ async function handlePersonalNumberChange(event) {
   const newValue = input.value.trim();
   const oldValue = personalValueBeforeEdit;
   if (oldValue === newValue) {
-    if (activeEntryGroup === "採血" && newValue && !getBloodScanHistory().length) {
+    if (activeEntryGroup === "採血" && newValue && !String(form.elements.namedItem("採血確認")?.value || "").trim()) {
       await loadEntryForPersonalNumber(newValue);
     }
     await updatePatientSummary();
@@ -2039,7 +1980,7 @@ function clearFormForPersonalNumber(personalNumber) {
       }
     });
   });
-  renderBloodScanHistory();
+  renderBloodScanStatus();
 }
 
 
@@ -2064,7 +2005,7 @@ async function loadEntryForPersonalNumber(personalNumber) {
   resetQuestionnaireForm();
   isDirty = false;
   entryGroupDirty = false;
-  renderBloodScanHistory();
+  renderBloodScanStatus();
   await updatePatientSummary();
   updateEntryGuidanceSelection();
   if (activeEntryGroup) await updateEntryVerificationUi();
@@ -2088,7 +2029,7 @@ function applyEntryRecordToForm(data, options = {}) {
       });
     }
   });
-  renderBloodScanHistory();
+  renderBloodScanStatus();
   updateEntryGuidanceSelection();
 }
 
