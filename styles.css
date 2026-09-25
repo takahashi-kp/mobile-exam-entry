@@ -459,6 +459,56 @@ body[data-view="entry"][data-entry-mode="group"] #saveRecord {
   padding: 12px 14px;
 }
 
+.blood-confirmation-head {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-top: 18px;
+  max-width: 720px;
+}
+
+.blood-confirmation-head span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.blood-confirmation-list {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin-top: 8px;
+  max-width: 720px;
+  overflow: hidden;
+}
+
+.blood-confirmation-empty {
+  color: var(--muted);
+  margin: 0;
+  padding: 14px;
+}
+
+.blood-confirmation-row {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(150px, 1fr) minmax(100px, 1fr) auto;
+  padding: 11px 14px;
+}
+
+.blood-confirmation-row + .blood-confirmation-row {
+  border-top: 1px solid var(--line);
+}
+
+.blood-confirmation-result {
+  background: #dcefe8;
+  border-radius: 999px;
+  color: #126259;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 4px 8px;
+}
+
 .section-block {
   background: #f8faf8;
   border-bottom: 1px solid var(--line);

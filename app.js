@@ -200,7 +200,7 @@ const PROGRESS_GROUPS = [
   { label: "脈", target: "脈", fields: ["脈拍", "脈_自由入力"] },
   { label: "身体", target: "身体", fields: ["身長", "体重", "腹囲", "身体計測_自由入力"] },
   { label: "聴力", target: "聴力", fields: ["聴力(右)1000Hz", "聴力(左)1000Hz", "聴力(右)4000Hz", "聴力(左)4000Hz", "聴力_自由入力"] },
-  { label: "採血", target: "採血", fields: ["採血確認"] },
+  { label: "採血", target: "採血", fields: ["採血確認", "採血確認ログ", "採血管バーコード履歴"] },
   { label: "診察", target: "診察", fields: ["巡回診察", "結膜貧血", "甲状腺腫大", "心雑音", "脈の異常", "呼吸音異常", "その他", "その他_自由入力", "巡回診察_自由入力"] }
 ];
 
@@ -242,6 +242,8 @@ const identityEditButton = document.querySelector("#editPatientIdentity");
 const patientAgeDisplay = document.querySelector("#patientAgeDisplay");
 const bloodTubeBarcode = document.querySelector("#bloodTubeBarcode");
 const bloodBarcodeError = document.querySelector("#bloodBarcodeError");
+const bloodConfirmationRows = document.querySelector("#bloodConfirmationRows");
+const bloodConfirmationCount = document.querySelector("#bloodConfirmationCount");
 let editingId = null;
 let activeGroup = null;
 let db;
@@ -806,7 +808,7 @@ async function openEntryGroup(groupKey) {
   const menuButton = document.querySelector(`[data-entry-group="${cssEscape(groupKey)}"]`);
   if (title) title.textContent = menuButton?.dataset.entryLabel || groupKey;
   if (groupKey === "診察") await renderDiagnosisReference();
-  if (groupKey === "採血") renderBloodScanStatus();
+  if (groupKey === "採血") renderBloodConfirmationLog();
   await updateEntryVerificationUi();
   requestAnimationFrame(() => {
     section.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -988,16 +990,24 @@ async function processBloodTubeBarcode(scannedCode) {
     setProgrammaticFormChange(() => {
       form.elements.namedItem("採血確認").value = "";
     });
-    renderBloodScanStatus();
+    renderBloodConfirmationLog();
     showBloodBarcodeError("エラー　番号が一致しません");
     await updateEntryVerificationUi();
     requestAnimationFrame(() => bloodTubeBarcode?.focus());
     return;
   }
+  const confirmationLog = getBloodConfirmationLog();
+  confirmationLog.push({
+    code: scannedCode,
+    confirmedAt: new Date().toISOString(),
+    deviceId: await getSyncDeviceId()
+  });
   const data = formToRecord();
   data["採血確認"] = "済";
+  data["採血確認ログ"] = JSON.stringify(confirmationLog);
   setProgrammaticFormChange(() => {
     form.elements.namedItem("採血確認").value = "済";
+    form.elements.namedItem("採血確認ログ").value = data["採血確認ログ"];
   });
   if (bloodBarcodeError) bloodBarcodeError.hidden = true;
   await assignReceptionNumberIfEmpty(data);
@@ -1008,13 +1018,49 @@ async function processBloodTubeBarcode(scannedCode) {
   });
   if (saved) {
     entryGroupDirty = false;
+    renderBloodConfirmationLog();
     await updateEntryVerificationUi();
     await updateEntryMenuStatuses();
   }
   requestAnimationFrame(() => bloodTubeBarcode?.focus());
 }
 
-function renderBloodScanStatus() {
+function getBloodConfirmationLog() {
+  const current = parseBloodLog(form.elements.namedItem("採血確認ログ")?.value);
+  if (current.length) return current;
+  return parseBloodLog(form.elements.namedItem("採血管バーコード履歴")?.value)
+    .filter((item) => item.matched !== false)
+    .map((item) => ({
+      code: item.code || "",
+      confirmedAt: item.confirmedAt || item.readAt || "",
+      deviceId: item.deviceId || ""
+    }));
+}
+
+function parseBloodLog(raw) {
+  if (!String(raw || "").trim()) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((item) => item && typeof item === "object") : [];
+  } catch {
+    return [];
+  }
+}
+
+function renderBloodConfirmationLog() {
+  const history = getBloodConfirmationLog();
+  if (bloodConfirmationCount) bloodConfirmationCount.textContent = `確認 ${history.length}件`;
+  if (bloodConfirmationRows) {
+    bloodConfirmationRows.innerHTML = history.length
+      ? history.slice().reverse().map((item) => `
+        <div class="blood-confirmation-row">
+          <span>${escapeHtml(formatVerificationDate(item.confirmedAt) || "日時不明")}</span>
+          <strong>${escapeHtml(item.code || "番号不明")}</strong>
+          <span class="blood-confirmation-result">確認済み</span>
+        </div>
+      `).join("")
+      : '<p class="blood-confirmation-empty">確認ログはありません。</p>';
+  }
   if (String(form.elements.namedItem("採血確認")?.value || "").trim() === "済" && bloodBarcodeError) {
     bloodBarcodeError.hidden = true;
   }
@@ -1877,8 +1923,10 @@ function handlePersonalNumberInput(event) {
   if (nextCode === personalValueBeforeEdit) return;
   setProgrammaticFormChange(() => {
     form.elements.namedItem("採血確認").value = "";
+    form.elements.namedItem("採血確認ログ").value = "";
+    form.elements.namedItem("採血管バーコード履歴").value = "";
   });
-  renderBloodScanStatus();
+  renderBloodConfirmationLog();
 }
 
 function queuePersonalNumberChange(event) {
@@ -1894,7 +1942,7 @@ function queuePersonalNumberChange(event) {
 
 function scheduleBloodPatientRefresh() {
   requestAnimationFrame(() => {
-    renderBloodScanStatus();
+    renderBloodConfirmationLog();
     bloodTubeBarcode?.focus();
   });
 }
@@ -2017,7 +2065,7 @@ async function loadEntryForPersonalNumber(personalNumber) {
   resetQuestionnaireForm();
   isDirty = false;
   entryGroupDirty = false;
-  renderBloodScanStatus();
+  renderBloodConfirmationLog();
   await updatePatientSummary();
   updateEntryGuidanceSelection();
   if (activeEntryGroup) await updateEntryVerificationUi();
@@ -2041,7 +2089,7 @@ function applyEntryRecordToForm(data, options = {}) {
       });
     }
   });
-  renderBloodScanStatus();
+  renderBloodConfirmationLog();
   updateEntryGuidanceSelection();
 }
 
