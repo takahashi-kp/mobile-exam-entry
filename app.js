@@ -1026,9 +1026,20 @@ async function processBloodTubeBarcode(scannedCode) {
 }
 
 function getBloodConfirmationLog() {
-  const current = parseBloodLog(form.elements.namedItem("採血確認ログ")?.value);
+  return normalizeBloodConfirmationLog(
+    form.elements.namedItem("採血確認ログ")?.value,
+    form.elements.namedItem("採血管バーコード履歴")?.value
+  );
+}
+
+function getBloodConfirmationLogFromData(data) {
+  return normalizeBloodConfirmationLog(data?.["採血確認ログ"], data?.["採血管バーコード履歴"]);
+}
+
+function normalizeBloodConfirmationLog(currentRaw, legacyRaw) {
+  const current = parseBloodLog(currentRaw);
   if (current.length) return current;
-  return parseBloodLog(form.elements.namedItem("採血管バーコード履歴")?.value)
+  return parseBloodLog(legacyRaw)
     .filter((item) => item.matched !== false)
     .map((item) => ({
       code: item.code || "",
@@ -1102,6 +1113,17 @@ async function renderDiagnosisReference() {
   if (!container) return;
   const data = formToRecord();
   const examGroups = PROGRESS_GROUPS.filter((group) => group.target !== "診察").map((group) => {
+    if (group.target === "採血") {
+      const history = getBloodConfirmationLogFromData(data);
+      const dates = [...new Set(history.map((item) => item.confirmedAt).filter(Boolean))]
+        .map((value) => formatVerificationDate(value))
+        .filter(Boolean);
+      if (!data["採血確認"] && !dates.length) return "";
+      return `<section><h4>${escapeHtml(group.label)}</h4><dl>
+        ${data["採血確認"] ? `<div><dt>採血確認</dt><dd>${escapeHtml(data["採血確認"])}</dd></div>` : ""}
+        ${dates.length ? `<div><dt>採血確認日時</dt><dd>${dates.map(escapeHtml).join("<br>")}</dd></div>` : ""}
+      </dl></section>`;
+    }
     const values = group.fields
       .filter((field) => data[field] !== false && String(data[field] || "").trim())
       .map((field) => `<div><dt>${escapeHtml(field)}</dt><dd>${escapeHtml(formatReferenceValue(data[field]))}</dd></div>`)
