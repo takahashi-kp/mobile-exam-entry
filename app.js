@@ -1811,31 +1811,52 @@ function validateRecord(data) {
 
 function resetForm() {
   editingId = null;
-  setProgrammaticFormChange(() => form.reset());
+  clearEntryRecordForm();
   isDirty = false;
   entryGroupDirty = false;
   personalValueBeforeEdit = "";
   setPatientIdentityEditable(false);
-  renderBloodScanStatus();
   updatePatientSummary();
   toast("新規入力に切り替えました");
 }
 
 async function startNewWalkInRecord() {
   editingId = null;
-  setProgrammaticFormChange(() => {
-    form.reset();
-    clearQuestionnaireForm();
-  });
+  clearEntryRecordForm();
+  setProgrammaticFormChange(() => clearQuestionnaireForm());
   setPatientIdentityEditable(true);
   isDirty = false;
   entryGroupDirty = false;
   personalValueBeforeEdit = "";
-  renderBloodScanStatus();
   await updatePatientSummary();
   await switchView("entry");
   form.elements.namedItem("個人番号")?.focus();
   toast("飛び入り受診者の新規入力を開始しました。個人番号と氏名を入力してください。");
+}
+
+function clearEntryRecordForm() {
+  setProgrammaticFormChange(() => {
+    form.reset();
+    Array.from(form.elements).forEach((field) => {
+      if (!field.name) return;
+      if (field.type === "checkbox" || field.type === "radio") {
+        field.checked = false;
+      } else {
+        field.value = "";
+      }
+    });
+    if (bloodTubeBarcode) bloodTubeBarcode.value = "";
+  });
+  if (patientAgeDisplay) patientAgeDisplay.value = "";
+  if (bloodBarcodeError) {
+    bloodBarcodeError.hidden = true;
+    bloodBarcodeError.textContent = "";
+  }
+  const diagnosisReference = document.querySelector("#diagnosisReferenceContent");
+  if (diagnosisReference) diagnosisReference.innerHTML = "";
+  const verificationPanel = document.querySelector("#entryVerificationActions");
+  if (verificationPanel) verificationPanel.hidden = true;
+  updateEntryGuidanceSelection();
 }
 
 async function handlePersonalNumberKeydown(event) {
@@ -1968,19 +1989,10 @@ function hasCurrentInput() {
 }
 
 function clearFormForPersonalNumber(personalNumber) {
+  clearEntryRecordForm();
   setProgrammaticFormChange(() => {
-    Array.from(form.elements).forEach((field) => {
-      if (!field.name) return;
-      if (field.name === "個人番号") {
-        field.value = personalNumber;
-      } else if (field.type === "checkbox") {
-        field.checked = false;
-      } else {
-        field.value = "";
-      }
-    });
+    form.elements.namedItem("個人番号").value = personalNumber;
   });
-  renderBloodScanStatus();
 }
 
 
@@ -2539,8 +2551,8 @@ function formatFasting(data) {
 async function startRecordForPatient(code, targetGroup = "") {
   if (!(await confirmSaveBeforeLeaving())) return;
   editingId = null;
+  clearEntryRecordForm();
   setProgrammaticFormChange(() => {
-    form.reset();
     form.elements.namedItem("個人番号").value = code || "";
   });
   isDirty = false;
