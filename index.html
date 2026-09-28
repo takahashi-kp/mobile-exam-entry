@@ -19,7 +19,6 @@
       <div class="header-controls">
         <div class="segmented" role="tablist" aria-label="表示切替">
           <button data-view="reception" type="button">受付</button>
-          <button data-view="recovery" type="button">カード復元</button>
           <button class="is-active" data-view="entry" type="button">入力</button>
           <button data-view="records" type="button">一覧</button>
           <button data-view="questionnaire" type="button">問診</button>
@@ -471,35 +470,6 @@
         </div>
       </section>
 
-      <section class="view" id="recoveryView">
-        <div class="recovery-layout">
-          <section class="recovery-reader">
-            <p class="eyebrow">災害・端末故障時</p>
-            <h2>FeliCaカードから復元</h2>
-            <p>予定CSVを取り込み、対象グループを選択してからカードを1枚ずつPaSoRiへ置きます。</p>
-            <div class="recovery-scope" id="recoveryGroupLabel">予定グループ未選択</div>
-            <button class="primary" id="scanRecoveryCard" type="button">カードを読み取って復元</button>
-            <div class="recovery-state" id="recoveryState" data-state="idle" aria-live="polite">
-              <strong>カードを置いてください</strong>
-              <span>個人番号は予定者リストとの照合で特定します。</span>
-            </div>
-            <p class="recovery-note">復元対象はカードに記録された確認済み検査値です。氏名・性別・生年月日は予定者リストから復元します。備考・自由入力・採血確認ログはカードに保存していないため復元できません。</p>
-          </section>
-          <section class="recovery-results">
-            <div class="reception-history-head">
-              <h2>今回の復元結果</h2>
-              <strong id="recoveryCount">0件</strong>
-            </div>
-            <div class="table-wrap">
-              <table>
-                <thead><tr><th>時刻</th><th>個人番号</th><th>氏名</th><th>検査</th><th>カード</th><th>結果</th></tr></thead>
-                <tbody id="recoveryRows"><tr><td colspan="6">まだカードを読み取っていません。</td></tr></tbody>
-              </table>
-            </div>
-          </section>
-        </div>
-      </section>
-
       <section class="view" id="recordsView">
         <div class="list-head">
           <input id="searchRecords" placeholder="受付番号・個人番号・所見で検索">
@@ -675,10 +645,36 @@
             <button class="ghost" id="deleteSyncedLocal" type="button">同期済データを端末から削除</button>
           </div>
         </div>
+        <div class="recovery-layout sync-recovery">
+          <section class="recovery-reader">
+            <p class="eyebrow">災害・端末故障時</p>
+            <h2>FeliCaカードから復元</h2>
+            <p>予定CSVを取り込み、対象グループを選択してからカードを1枚ずつPaSoRiへ置きます。</p>
+            <div class="recovery-scope" id="recoveryGroupLabel">予定グループ未選択</div>
+            <button class="primary" id="scanRecoveryCard" type="button">カードを読み取って復元</button>
+            <div class="recovery-state" id="recoveryState" data-state="idle" aria-live="polite">
+              <strong>カードを置いてください</strong>
+              <span>個人番号は予定者リストとの照合で特定します。</span>
+            </div>
+            <p class="recovery-note">復元対象はカードに記録された確認済み検査値です。氏名・性別・生年月日は予定者リストから復元します。備考・自由入力・採血確認ログはカードに保存していないため復元できません。</p>
+          </section>
+          <section class="recovery-results">
+            <div class="reception-history-head">
+              <h2>今回の復元結果</h2>
+              <strong id="recoveryCount">0件</strong>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>時刻</th><th>個人番号</th><th>氏名</th><th>検査</th><th>カード</th><th>結果</th></tr></thead>
+                <tbody id="recoveryRows"><tr><td colspan="6">まだカードを読み取っていません。</td></tr></tbody>
+              </table>
+            </div>
+          </section>
+        </div>
       </section>
     </section>
   </main>
 
-  <script src="./app.js?v=20260928-09" type="module"></script>
+  <script src="./app.js?v=20260928-10" type="module"></script>
 </body>
 </html>

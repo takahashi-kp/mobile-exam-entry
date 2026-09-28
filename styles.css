@@ -447,6 +447,10 @@ button.ghost {
   grid-template-columns: minmax(360px, .75fr) minmax(560px, 1.25fr);
 }
 
+.sync-recovery {
+  margin-top: 18px;
+}
+
 .recovery-reader,
 .recovery-results {
   background: #f3f7f5;

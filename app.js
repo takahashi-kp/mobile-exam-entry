@@ -1353,9 +1353,11 @@ async function switchView(view) {
     await refreshReceptionRows();
     requestAnimationFrame(() => receptionPatientCode?.focus());
   }
-  if (view === "recovery") refreshRecoveryView();
   if (view === "schedules") await refreshScheduleRows();
-  if (view === "sync") await refreshCleanupSummary();
+  if (view === "sync") {
+    await refreshCleanupSummary();
+    refreshRecoveryView();
+  }
   if (view === "questionnaire") await updateQuestionnaireSexRules();
   if (view === "guidance") {
     hydrateGuidanceFromEntry(false);
