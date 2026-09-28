@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#176c6a">
   <title>出張健診 検査項目入力</title>
   <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="stylesheet" href="./styles.css?v=20260928-02">
+  <link rel="stylesheet" href="./styles.css?v=20260928-03">
 </head>
 <body>
   <div class="app-toast" id="appToast" role="status" aria-live="polite"></div>
@@ -18,6 +18,7 @@
       </div>
       <div class="header-controls">
         <div class="segmented" role="tablist" aria-label="表示切替">
+          <button data-view="reception" type="button">受付</button>
           <button class="is-active" data-view="entry" type="button">入力</button>
           <button data-view="records" type="button">一覧</button>
           <button data-view="questionnaire" type="button">問診</button>
@@ -420,6 +421,57 @@
         </form>
       </section>
 
+      <section class="view" id="receptionView">
+        <div class="reception-layout">
+          <section class="reception-workflow">
+            <div class="reception-heading">
+              <div>
+                <p class="eyebrow">巡回健診受付</p>
+                <h2>受診者受付</h2>
+              </div>
+              <span id="receptionGroupLabel">予定グループ未選択</span>
+            </div>
+            <label class="reception-code-field">
+              <span>個人番号</span>
+              <div>
+                <input id="receptionPatientCode" inputmode="numeric" autocomplete="off" placeholder="バーコード読取または手入力">
+                <button class="primary" id="lookupReceptionPatient" type="button">受診者を表示</button>
+              </div>
+            </label>
+            <div class="reception-patient" id="receptionPatient" hidden>
+              <span class="reception-patient-kana" id="receptionPatientKana"></span>
+              <strong id="receptionPatientName"></strong>
+              <dl>
+                <div><dt>個人番号</dt><dd id="receptionPatientCodeDisplay"></dd></div>
+                <div><dt>性別</dt><dd id="receptionPatientSex"></dd></div>
+                <div><dt>生年月日</dt><dd id="receptionPatientBirth"></dd></div>
+              </dl>
+            </div>
+            <div class="reception-actions" id="receptionActions" hidden>
+              <button class="primary reception-card-button" id="armReceptionCard" type="button">本人確認済み・カードを置く</button>
+              <button class="ghost" id="receiveWithoutCard" type="button">カードなしで受付</button>
+              <button class="ghost" id="clearReception" type="button">取消</button>
+            </div>
+            <div class="reception-state" id="receptionState" data-state="idle" aria-live="polite">
+              <strong>個人番号を読み取ってください</strong>
+              <span>受診票のバーコード、または手入力で検索します。</span>
+            </div>
+          </section>
+          <section class="reception-history">
+            <div class="reception-history-head">
+              <h2>本日の受付</h2>
+              <strong id="receptionCount">0人</strong>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>受付時刻</th><th>個人番号</th><th>氏名</th><th>方法</th><th>カード</th></tr></thead>
+                <tbody id="receptionRows"></tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      </section>
+
       <section class="view" id="recordsView">
         <div class="list-head">
           <input id="searchRecords" placeholder="受付番号・個人番号・所見で検索">
@@ -599,6 +651,6 @@
     </section>
   </main>
 
-  <script src="./app.js?v=20260928-04" type="module"></script>
+  <script src="./app.js?v=20260928-05" type="module"></script>
 </body>
 </html>

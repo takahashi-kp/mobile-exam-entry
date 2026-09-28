@@ -14,6 +14,7 @@ const SCHEDULE_CSV_HEADERS = ["受診者コード", "氏名", "カナ氏名", "�
 const EXAM_GROUP_VALUES = "examGroupValues";
 const PROGRESS_SUMMARIES = "progressSummaries";
 const QUESTIONNAIRE_RESPONSES = "questionnaireResponses";
+const RECEPTIONS = "receptions";
 let felicaHelperReady = false;
 
 const URINE_TESTS = [
@@ -246,6 +247,9 @@ const patientAgeDisplay = document.querySelector("#patientAgeDisplay");
 const felicaStatus = document.querySelector("#felicaStatus");
 const felicaReadCardButton = document.querySelector("#felicaReadCard");
 const felicaBindPatientButton = document.querySelector("#felicaBindPatient");
+const receptionPatientCode = document.querySelector("#receptionPatientCode");
+const receptionState = document.querySelector("#receptionState");
+const receptionActions = document.querySelector("#receptionActions");
 const bloodTubeBarcode = document.querySelector("#bloodTubeBarcode");
 const bloodBarcodeError = document.querySelector("#bloodBarcodeError");
 const bloodConfirmationRows = document.querySelector("#bloodConfirmationRows");
@@ -267,6 +271,8 @@ let bloodScanQueue = Promise.resolve();
 let personalChangeQueue = Promise.resolve();
 let lastFelicaCard = null;
 let felicaBusy = false;
+let receptionPatient = null;
+let receptionWaitToken = 0;
 const questionnaireChoiceState = new WeakMap();
 
 init();
@@ -306,7 +312,7 @@ async function init() {
 
 function openDb() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 5);
+    const req = indexedDB.open(DB_NAME, 6);
     req.onupgradeneeded = () => {
       const database = req.result;
       if (!database.objectStoreNames.contains(STORE)) {
@@ -336,6 +342,11 @@ function openDb() {
         const questionnaires = database.createObjectStore(QUESTIONNAIRE_RESPONSES, { keyPath: "id" });
         questionnaires.createIndex("patientKey", "patientKey");
         questionnaires.createIndex("syncState", "syncState");
+      }
+      if (!database.objectStoreNames.contains(RECEPTIONS)) {
+        const receptions = database.createObjectStore(RECEPTIONS, { keyPath: "id" });
+        receptions.createIndex("scheduleGroupId", "scheduleGroupId");
+        receptions.createIndex("receivedAt", "receivedAt");
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -580,6 +591,15 @@ function bindUi() {
   identityEditButton?.addEventListener("click", () => setPatientIdentityEditable(true));
   felicaReadCardButton?.addEventListener("click", readFelicaCardAndOpenPatient);
   felicaBindPatientButton?.addEventListener("click", bindFelicaToCurrentPatient);
+  document.querySelector("#lookupReceptionPatient")?.addEventListener("click", lookupReceptionPatient);
+  receptionPatientCode?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    lookupReceptionPatient();
+  });
+  document.querySelector("#armReceptionCard")?.addEventListener("click", armReceptionCard);
+  document.querySelector("#receiveWithoutCard")?.addEventListener("click", receiveReceptionWithoutCard);
+  document.querySelector("#clearReception")?.addEventListener("click", resetReceptionWorkflow);
   document.querySelector("#saveQuestionnaire")?.addEventListener("click", saveQuestionnaireRecord);
   document.querySelector("#newRecord").addEventListener("click", async () => {
     if (await confirmSaveBeforeLeaving()) {
@@ -733,6 +753,215 @@ async function bindFelicaToCurrentPatient() {
     felicaBindPatientButton.disabled = false;
     felicaBusy = false;
   }
+}
+
+function setReceptionState(state, title, detail) {
+  if (!receptionState) return;
+  receptionState.dataset.state = state;
+  receptionState.innerHTML = `<strong>${escapeHtml(title)}</strong><span>${escapeHtml(detail)}</span>`;
+}
+
+async function lookupReceptionPatient() {
+  receptionWaitToken += 1;
+  const code = String(receptionPatientCode?.value || "").trim();
+  if (!activeGroup) {
+    setReceptionState("error", "予定グループが未選択です", "予定管理から今回の健診グループを開いてください。" );
+    return;
+  }
+  if (!code) {
+    setReceptionState("error", "個人番号を入力してください", "受診票のバーコードを読み取ることもできます。" );
+    receptionPatientCode?.focus();
+    return;
+  }
+  const planned = await getPlannedPatient(code);
+  const record = planned ? null : await findRecordByPatient(code);
+  const recordData = record ? await assembleRecordData(record) : null;
+  const data = planned ? plannedToData(planned) : recordData;
+  if (!data) {
+    receptionPatient = null;
+    renderReceptionPatient();
+    setReceptionState("error", "受診予定者が見つかりません", "個人番号と選択中の予定グループを確認してください。" );
+    return;
+  }
+  receptionPatient = {
+    patientCode: code,
+    name: data["氏名"] || "",
+    kana: data["カナ氏名"] || "",
+    sex: data["性別名称"] || "",
+    birthDate: data["生年月日"] || ""
+  };
+  renderReceptionPatient();
+  const existing = await getOne(RECEPTIONS, receptionId(code));
+  setReceptionState(
+    existing ? "warning" : "ready",
+    existing ? "この受診者は受付済みです" : "受診者を確認してください",
+    existing ? `${formatVerificationDate(existing.receivedAt)}　${existing.method === "felica" ? "FeliCa受付" : "カードなし受付"}` : "氏名・性別・生年月日が正しければ受付方法を選択します。"
+  );
+}
+
+function renderReceptionPatient() {
+  const panel = document.querySelector("#receptionPatient");
+  if (!panel) return;
+  panel.hidden = !receptionPatient;
+  receptionActions.hidden = !receptionPatient;
+  document.querySelector("#receptionPatientKana").textContent = receptionPatient?.kana || "";
+  document.querySelector("#receptionPatientName").textContent = receptionPatient?.name || "氏名未登録";
+  document.querySelector("#receptionPatientCodeDisplay").textContent = receptionPatient?.patientCode || "";
+  document.querySelector("#receptionPatientSex").textContent = receptionPatient?.sex || "未登録";
+  document.querySelector("#receptionPatientBirth").textContent = receptionPatient?.birthDate || "未登録";
+}
+
+async function armReceptionCard() {
+  if (!receptionPatient || felicaBusy) return;
+  const button = document.querySelector("#armReceptionCard");
+  const token = ++receptionWaitToken;
+  button.disabled = true;
+  setReceptionState("waiting", "カードを置いてください", "PaSoRiにカードを置くと自動的に初期化して受付します。" );
+  const deadline = Date.now() + 60000;
+  while (token === receptionWaitToken && Date.now() < deadline) {
+    try {
+      await felicaRequest("/health");
+      felicaHelperReady = true;
+      const card = await felicaRequest("/card/read", {});
+      if (token !== receptionWaitToken) return;
+      await initializeReceptionCard(card);
+      button.disabled = false;
+      return;
+    } catch (error) {
+      if (error.status && error.status !== 500) {
+        setReceptionState("error", "カード受付を完了できません", error.message || "カードを置き直してください。" );
+        button.disabled = false;
+        return;
+      }
+      await delay(900);
+    }
+  }
+  if (token === receptionWaitToken) {
+    setReceptionState("error", "カードを確認できませんでした", "補助アプリとPaSoRiを確認するか、カードなしで受付してください。" );
+  }
+  button.disabled = false;
+}
+
+async function initializeReceptionCard(card) {
+  felicaBusy = true;
+  try {
+    const bindingResult = await felicaRequest("/binding/lookup", { idm: card.idm });
+    const previous = bindingResult.binding;
+    if (previous && (String(previous.patientCode) !== receptionPatient.patientCode || String(previous.groupId) !== String(activeGroup.id))) {
+      const confirmed = window.confirm(`このカードは個人番号 ${previous.patientCode} に登録されています。\n内容を消去して現在の受診者へ再登録しますか？`);
+      if (!confirmed) {
+        setReceptionState("warning", "カードの再登録を中止しました", "別のカードを置くか、カードなしで受付してください。" );
+        return;
+      }
+    }
+    setReceptionState("writing", "カードを初期化しています", "カードを動かさないでください。" );
+    const payload = encodeFelicaExamPayload({
+      groupId: String(activeGroup.id),
+      patientCode: receptionPatient.patientCode,
+      groupValues: []
+    });
+    const writeRequest = {
+      idm: card.idm,
+      payloadHex: bytesToHex(payload),
+      allowWrite: true,
+      confirmation: "WRITE_AND_VERIFY"
+    };
+    await felicaRequest("/card/write", writeRequest);
+    await felicaRequest("/card/write", writeRequest);
+    await felicaRequest("/binding/save", {
+      idm: card.idm,
+      patientCode: receptionPatient.patientCode,
+      groupId: String(activeGroup.id),
+      overwrite: true
+    });
+    await saveReception("felica", card.idm);
+    setFelicaStatus(`カード ${card.idm.slice(-4)} 登録済`, "ready");
+    setReceptionState("complete", "受付完了・カードを渡してください", `カード末尾 ${card.idm.slice(-4)}　書込みと再読取り検証が完了しました。` );
+    finishReceptionAfterDelay();
+  } catch (error) {
+    setReceptionState("error", "カード受付に失敗しました", `${error.message || "カードを置き直してください。"} 端末には受付完了として記録していません。` );
+  } finally {
+    felicaBusy = false;
+  }
+}
+
+async function receiveReceptionWithoutCard() {
+  if (!receptionPatient) return;
+  receptionWaitToken += 1;
+  await saveReception("no_card", "");
+  setReceptionState("complete", "カードなしで受付しました", "各検査では受診票の個人番号を読み取ってください。" );
+  finishReceptionAfterDelay();
+}
+
+async function saveReception(method, cardIdm) {
+  const now = new Date().toISOString();
+  const existing = await getOne(RECEPTIONS, receptionId(receptionPatient.patientCode));
+  await put(RECEPTIONS, {
+    id: receptionId(receptionPatient.patientCode),
+    entityType: "reception",
+    scheduleGroupId: activeGroup.id,
+    scheduleGroupName: activeGroup.name || "",
+    patientCode: receptionPatient.patientCode,
+    patientName: receptionPatient.name,
+    patientKana: receptionPatient.kana,
+    sex: receptionPatient.sex,
+    birthDate: receptionPatient.birthDate,
+    method,
+    cardIdm: cardIdm || "",
+    receivedAt: now,
+    firstReceivedAt: existing?.firstReceivedAt || now,
+    deviceId: await getSyncDeviceId(),
+    updatedAt: now,
+    syncState: "local"
+  });
+  await refreshReceptionRows();
+}
+
+function receptionId(patientCode) {
+  return `reception::${activeGroup?.id || "nogroup"}::${patientCode}`;
+}
+
+async function refreshReceptionRows() {
+  const rows = document.querySelector("#receptionRows");
+  if (!rows) return;
+  const items = (await getAll(RECEPTIONS))
+    .filter((item) => !activeGroup || item.scheduleGroupId === activeGroup.id)
+    .sort((a, b) => String(b.receivedAt).localeCompare(String(a.receivedAt)));
+  document.querySelector("#receptionCount").textContent = `${items.length}人`;
+  rows.innerHTML = items.length ? items.map((item) => `<tr>
+    <td>${escapeHtml(formatTime(item.receivedAt))}</td>
+    <td>${escapeHtml(item.patientCode)}</td>
+    <td><span class="patient-name-lines"><small>${escapeHtml(item.patientKana || "")}</small><strong>${escapeHtml(item.patientName || "")}</strong></span></td>
+    <td>${item.method === "felica" ? "FeliCa" : "カードなし"}</td>
+    <td>${item.cardIdm ? escapeHtml(item.cardIdm.slice(-4)) : "－"}</td>
+  </tr>`).join("") : '<tr><td colspan="5">受付済みの受診者はいません。</td></tr>';
+  const label = document.querySelector("#receptionGroupLabel");
+  if (label) label.textContent = activeGroup ? `${activeGroup.name}${activeGroup.scheduledDate ? ` / ${activeGroup.scheduledDate}` : ""}` : "予定グループ未選択";
+}
+
+function formatTime(value) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : date.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" });
+}
+
+function finishReceptionAfterDelay() {
+  const completedPatientCode = receptionPatient?.patientCode || "";
+  window.setTimeout(() => {
+    if (receptionPatient?.patientCode === completedPatientCode) resetReceptionWorkflow();
+  }, 1800);
+}
+
+function resetReceptionWorkflow() {
+  receptionWaitToken += 1;
+  receptionPatient = null;
+  if (receptionPatientCode) receptionPatientCode.value = "";
+  renderReceptionPatient();
+  setReceptionState("idle", "個人番号を読み取ってください", "受診票のバーコード、または手入力で検索します。" );
+  receptionPatientCode?.focus();
+}
+
+function delay(milliseconds) {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 }
 
 async function writeConfirmedExamSnapshotToFelica(groupKey) {
@@ -922,6 +1151,7 @@ function handleExclusiveCheckboxes(event) {
 
 async function switchView(view) {
   const currentView = document.body.dataset.view || "entry";
+  if (currentView === "reception" && view !== "reception") receptionWaitToken += 1;
   if (currentView === "entry" && view !== "entry" && entryGroupDirty && isVerifiableEntryGroup(activeEntryGroup)) {
     const shouldRegister = window.confirm("この検査には未登録の変更があります。\n登録（仮保存）して画面を移動しますか？");
     if (shouldRegister) {
@@ -943,6 +1173,10 @@ async function switchView(view) {
   });
   if (navigator.onLine) await syncAndRefresh();
   if (view === "records") await refreshRows();
+  if (view === "reception") {
+    await refreshReceptionRows();
+    requestAnimationFrame(() => receptionPatientCode?.focus());
+  }
   if (view === "schedules") await refreshScheduleRows();
   if (view === "sync") await refreshCleanupSummary();
   if (view === "questionnaire") await updateQuestionnaireSexRules();
@@ -2708,7 +2942,7 @@ async function saveScheduleGroupField(groupId, field, value) {
 }
 
 async function cascadeScheduleGroupName(groupId, groupName, updatedAt) {
-  const storeNames = [SCHEDULE_PATIENTS, STORE, EXAM_GROUP_VALUES, PROGRESS_SUMMARIES, QUESTIONNAIRE_RESPONSES];
+  const storeNames = [SCHEDULE_PATIENTS, STORE, EXAM_GROUP_VALUES, PROGRESS_SUMMARIES, QUESTIONNAIRE_RESPONSES, RECEPTIONS];
   for (const storeName of storeNames) {
     const items = await getAll(storeName);
     for (const item of items) {

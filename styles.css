@@ -291,6 +291,183 @@ button.ghost {
   display: block;
 }
 
+.reception-layout {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(430px, .9fr) minmax(500px, 1.1fr);
+}
+
+.reception-workflow,
+.reception-history {
+  background: #f3f7f5;
+  border: 1px solid #9eaaa6;
+  border-radius: 7px;
+  padding: 18px;
+}
+
+.reception-heading,
+.reception-history-head {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.reception-heading h2,
+.reception-history h2 {
+  font-size: 21px;
+  margin: 2px 0 0;
+}
+
+.reception-heading > span {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: var(--muted);
+  padding: 7px 9px;
+}
+
+.reception-code-field {
+  margin-top: 20px;
+}
+
+.reception-code-field > span {
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.reception-code-field > div {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(180px, 1fr) max-content;
+}
+
+.reception-code-field input {
+  font-size: 20px;
+  font-weight: 700;
+  min-height: 48px;
+}
+
+.reception-patient {
+  background: #fff;
+  border: 2px solid #4e7774;
+  border-radius: 7px;
+  margin-top: 18px;
+  padding: 18px;
+}
+
+.reception-patient-kana {
+  color: var(--muted);
+  display: block;
+  font-size: 13px;
+}
+
+.reception-patient > strong {
+  display: block;
+  font-size: 26px;
+  margin-top: 3px;
+}
+
+.reception-patient dl {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 16px 0 0;
+}
+
+.reception-patient dl div {
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+
+.reception-patient dt {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.reception-patient dd {
+  font-weight: 700;
+  margin: 3px 0 0;
+}
+
+.reception-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.reception-card-button {
+  min-height: 46px;
+}
+
+.reception-state {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-left: 5px solid #85918e;
+  border-radius: 5px;
+  display: grid;
+  gap: 4px;
+  margin-top: 18px;
+  padding: 13px 14px;
+}
+
+.reception-state strong {
+  font-size: 16px;
+}
+
+.reception-state span {
+  color: var(--muted);
+}
+
+.reception-state[data-state="ready"] { border-left-color: #287d57; }
+.reception-state[data-state="waiting"],
+.reception-state[data-state="writing"] { background: #eef7ff; border-left-color: #347bb4; }
+.reception-state[data-state="complete"] { background: #e8f7ee; border-left-color: #19834c; }
+.reception-state[data-state="warning"] { background: #fff8e5; border-left-color: #bc7a13; }
+.reception-state[data-state="error"] { background: #fff0ef; border-left-color: #bd342a; }
+
+.reception-history-head {
+  margin-bottom: 12px;
+}
+
+.reception-history-head strong {
+  color: var(--accent);
+  font-size: 18px;
+}
+
+.reception-history .patient-name-lines {
+  align-items: flex-start;
+}
+
+@media (max-width: 1050px) {
+  .reception-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .reception-workflow,
+  .reception-history {
+    padding: 13px;
+  }
+
+  .reception-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .reception-code-field > div,
+  .reception-patient dl {
+    grid-template-columns: 1fr;
+  }
+
+  .reception-actions button {
+    width: 100%;
+  }
+}
+
 .entry-group-menu {
   padding: 6px 0 18px;
 }
