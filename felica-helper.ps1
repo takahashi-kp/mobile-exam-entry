@@ -9,6 +9,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+Add-Type -AssemblyName System.Security
+
 Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
@@ -318,7 +320,18 @@ function Write-CardBackup($Backup) {
     $existing = ConvertTo-Hashtable ([Text.Encoding]::UTF8.GetString($plain) | ConvertFrom-Json)
     if ($existing) { $backups = $existing }
   }
-  $backups[$Backup.idm] = @{ capturedAt = [DateTime]::UtcNow.ToString('o'); data = $Backup }
+  $history = @()
+  $current = $backups[$Backup.idm]
+  if ($current) {
+    if ($current -is [Collections.IDictionary] -and $current.Contains('data')) {
+      $history = @($current)
+    } else {
+      $history = @($current)
+    }
+  }
+  $history += @{ capturedAt = [DateTime]::UtcNow.ToString('o'); data = $Backup }
+  if ($history.Count -gt 20) { $history = @($history | Select-Object -Last 20) }
+  $backups[$Backup.idm] = $history
   $json = $backups | ConvertTo-Json -Depth 12 -Compress
   $bytes = [Text.Encoding]::UTF8.GetBytes($json)
   $encrypted = [Security.Cryptography.ProtectedData]::Protect($bytes, $null, [Security.Cryptography.DataProtectionScope]::CurrentUser)
@@ -382,7 +395,7 @@ $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, $Port)
 $listener.Start()
 Write-Host "Mobile Exam FeliCa helper"
 Write-Host "Listening only on http://127.0.0.1:$Port"
-Write-Host "Press Ctrl+C to stop. No card data is written by this version."
+Write-Host "Press Ctrl+C to stop. Card writes require IDm and explicit confirmation."
 
 try {
   while ($true) {
@@ -417,7 +430,7 @@ try {
       $contentLength = if ($headers.ContainsKey('content-length')) { [int]$headers['content-length'] } else { 0 }
       $body = Get-RequestBody $reader $contentLength
       if ($method -eq 'GET' -and $path -eq '/health') {
-        Send-Response $writer 200 @{ ok = $true; service = "mobile-exam-felica-helper"; version = "0.1.0" } $origin
+        Send-Response $writer 200 @{ ok = $true; service = "mobile-exam-felica-helper"; version = "0.2.0" } $origin
       } elseif ($method -eq 'POST' -and $path -eq '/card/read') {
         Send-Response $writer 200 (Get-FelicaCard) $origin
       } elseif ($method -eq 'POST' -and $path -eq '/card/backup') {
