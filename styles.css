@@ -447,7 +447,7 @@ button.ghost {
   grid-template-columns: minmax(360px, .75fr) minmax(560px, 1.25fr);
 }
 
-.sync-recovery {
+.schedule-recovery {
   margin-top: 18px;
 }
 
