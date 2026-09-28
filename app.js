@@ -271,6 +271,11 @@ let bloodScanQueue = Promise.resolve();
 let personalChangeQueue = Promise.resolve();
 let lastFelicaCard = null;
 let felicaBusy = false;
+let felicaPollBusy = false;
+let boothCardPresent = false;
+let boothCardIdm = "";
+let boothCardPatientCode = "";
+let boothCardGroupId = "";
 let receptionPatient = null;
 let receptionWaitToken = 0;
 const questionnaireChoiceState = new WeakMap();
@@ -305,6 +310,7 @@ async function init() {
     if (document.visibilityState === "visible") syncAndRefresh().catch(() => {});
   });
   window.setInterval(() => syncAndRefresh().catch(() => {}), 30000);
+  window.setInterval(() => pollFelicaForActiveBooth().catch(() => {}), 1200);
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("./sw.js").catch(() => {});
   }
@@ -752,6 +758,72 @@ async function bindFelicaToCurrentPatient() {
   } finally {
     felicaBindPatientButton.disabled = false;
     felicaBusy = false;
+  }
+}
+
+function activeBoothCanWriteFelica() {
+  const patientCode = String(form.elements.namedItem("個人番号")?.value || "").trim();
+  return boothCardPresent
+    && Boolean(boothCardIdm)
+    && boothCardPatientCode === patientCode
+    && boothCardGroupId === String(activeGroup?.id || "");
+}
+
+async function pollFelicaForActiveBooth() {
+  if (document.body.dataset.view !== "entry" || !activeEntryGroup || felicaBusy || felicaPollBusy || document.hidden) return;
+  felicaPollBusy = true;
+  try {
+    await felicaRequest("/health");
+    felicaHelperReady = true;
+    const card = await felicaRequest("/card/read", {});
+    const isNewPlacement = !boothCardPresent || boothCardIdm !== card.idm;
+    boothCardPresent = true;
+    boothCardIdm = card.idm;
+    if (!isNewPlacement) return;
+    const result = await felicaRequest("/binding/lookup", { idm: card.idm });
+    const binding = result.binding;
+    if (!binding) {
+      boothCardPatientCode = "";
+      boothCardGroupId = "";
+      setFelicaStatus(`カード ${card.idm.slice(-4)} 未登録`, "error");
+      toast("受付登録されていないカードです。受付画面で登録してください。", true);
+      await updateEntryVerificationUi();
+      return;
+    }
+    if (String(binding.groupId) !== String(activeGroup?.id || "")) {
+      boothCardPatientCode = "";
+      boothCardGroupId = "";
+      setFelicaStatus(`カード ${card.idm.slice(-4)} 別グループ`, "error");
+      toast("現在とは別の予定グループに登録されたカードです。", true);
+      await updateEntryVerificationUi();
+      return;
+    }
+    boothCardPatientCode = String(binding.patientCode || "");
+    boothCardGroupId = String(binding.groupId || "");
+    const currentCode = String(form.elements.namedItem("個人番号")?.value || "").trim();
+    if (currentCode !== boothCardPatientCode) {
+      if (entryGroupDirty) {
+        setFelicaStatus("未登録入力あり", "error");
+        toast("前の受診者に未登録の入力があります。登録または取消後にカードを置き直してください。", true);
+        return;
+      }
+      await loadEntryForPersonalNumber(boothCardPatientCode);
+    }
+    setFelicaStatus(`カード ${card.idm.slice(-4)} 受診者表示中`, "ready");
+    toast(`個人番号 ${boothCardPatientCode} を表示しました`);
+    await updateEntryVerificationUi();
+    if (activeEntryGroup === "採血") requestAnimationFrame(() => bloodTubeBarcode?.focus());
+  } catch {
+    if (boothCardPresent) {
+      boothCardPresent = false;
+      boothCardIdm = "";
+      boothCardPatientCode = "";
+      boothCardGroupId = "";
+      setFelicaStatus("FeliCa接続可・カード待機", "ready");
+      await updateEntryVerificationUi();
+    }
+  } finally {
+    felicaPollBusy = false;
   }
 }
 
@@ -1216,6 +1288,10 @@ async function openEntryGroup(groupKey) {
   if (!section) return;
   activeEntryGroup = groupKey;
   entryGroupDirty = false;
+  boothCardPresent = false;
+  boothCardIdm = "";
+  boothCardPatientCode = "";
+  boothCardGroupId = "";
   document.body.dataset.entryMode = "group";
   document.querySelector("#entryGroupMenu")?.classList.add("is-hidden");
   form.classList.add("is-group-page");
@@ -1305,9 +1381,9 @@ async function updateEntryVerificationUi() {
   const bloodReady = isBlood && String(form.elements.namedItem("採血確認")?.value || item?.values?.["採血確認"] || "").trim() === "済";
   panel.className = `entry-verification-actions state-${state}`;
   badge.className = `verification-badge ${state}`;
-  confirmButton.hidden = isDiagnosis || state !== "draft" || (isBlood && !bloodReady);
+  confirmButton.hidden = isDiagnosis || isBlood || state !== "draft";
   registerButton.hidden = isBlood || state === "draft" || state === "confirmed";
-  felicaButton.hidden = state !== "confirmed";
+  felicaButton.hidden = state !== "confirmed" || !activeBoothCanWriteFelica();
   if (state === "dirty") {
     badge.textContent = "未登録変更あり";
     title.textContent = "入力内容はまだ保存されていません";
@@ -1320,7 +1396,7 @@ async function updateEntryVerificationUi() {
       ? "採血管バーコードを読み取って、個人番号と一致することを確認してください。"
       : `${formatVerificationDate(item?.registeredAt || item?.updatedAt)}　検査結果に間違いがなければ確認を押してください。`;
   } else if (state === "confirmed") {
-    badge.textContent = isDiagnosis ? "登録済み・確定" : "利用者確認済み・確定";
+    badge.textContent = isDiagnosis ? "登録済み・確定" : isBlood ? "採血確認済み・確定" : "利用者確認済み・確定";
     title.textContent = "この検査結果は最終確定されています";
     const cardStatus = item?.felicaWrittenAt
       ? ` FeliCa反映: ${formatVerificationDate(item.felicaWrittenAt)}（カード末尾 ${item.felicaIdmSuffix}）`
@@ -1359,11 +1435,11 @@ async function registerActiveEntryGroup(options = {}) {
   entryGroupDirty = false;
   await updateEntryVerificationUi();
   await updateEntryMenuStatuses();
-  if (activeEntryGroup === "診察" && !options.silent) {
+  if (activeEntryGroup === "診察" && !options.silent && activeBoothCanWriteFelica()) {
     const cardResult = await writeConfirmedExamSnapshotToFelica(activeEntryGroup);
     showFelicaSaveResult(cardResult, "診察を確定しました。");
   } else if (activeEntryGroup === "診察") {
-    // Silent saves are used while navigating; card writes require an explicit confirmation action.
+    if (!options.silent) toast("診察を確定しました。");
   } else if (!options.silent) {
     toast(`${activeEntryGroup}を仮保存しました。利用者確認はまだ完了していません。`);
   }
@@ -1394,8 +1470,12 @@ async function confirmActiveEntryGroup() {
   entryGroupDirty = false;
   await updateEntryVerificationUi();
   await updateEntryMenuStatuses();
-  const cardResult = await writeConfirmedExamSnapshotToFelica(activeEntryGroup);
-  showFelicaSaveResult(cardResult, `${activeEntryGroup}を確認済みにしました。`);
+  if (activeBoothCanWriteFelica()) {
+    const cardResult = await writeConfirmedExamSnapshotToFelica(activeEntryGroup);
+    showFelicaSaveResult(cardResult, `${activeEntryGroup}を確認済みにしました。`);
+  } else {
+    toast(`${activeEntryGroup}を確認済みにしました。`);
+  }
   await updateEntryVerificationUi();
   focusPersonalNumberForNextPatient();
 }
@@ -1459,13 +1539,14 @@ async function processBloodTubeBarcode(scannedCode) {
   const saved = await saveRecordData(data, {
     silent: true,
     groupTarget: "採血",
-    verificationStatus: "draft"
+    verificationStatus: "confirmed"
   });
   if (saved) {
     entryGroupDirty = false;
     renderBloodConfirmationLog();
     await updateEntryVerificationUi();
     await updateEntryMenuStatuses();
+    toast(activeBoothCanWriteFelica() ? "採血管を確認しました。FeliCaへ反映してください。" : "採血管を確認し、採血を確定しました。" );
   }
   requestAnimationFrame(() => bloodTubeBarcode?.focus());
 }
