@@ -34,12 +34,12 @@ python -m http.server 4173
 
 有償SDKは使用せず、同梱のUSB読み取りプログラムでカードのIDm、PMm、FeliCa Lite-Sのユーザーブロックを読み取ります。RC-S300の両インターフェースには、事前にZadigでWinUSBドライバーを設定します。
 
-1. PaSoRiを接続し、FeliCa Lite-Sを置きます。
-2. `start-felica-helper.bat` をダブルクリックします。
-3. 健診画面で受診者を選び、「この受診者に登録」を押します。
-4. 以後は「カード読取」で紐付いた受診者を開けます。
+1. PaSoRiを接続し、`start-felica-helper.bat` をダブルクリックします。
+2. 「受付」画面で受診票の個人番号を読み取り、本人情報を確認します。
+3. 「本人確認済み・カードを置く」を押してFeliCa Lite-Sを置き、受付を完了します。
+4. 各検査画面ではカードを置くか「カード読取」を押すと、検査画面を維持したまま紐付いた受診者へ切り替わります。
 
-補助アプリは `127.0.0.1:8765` だけで待ち受けます。紐付け情報は `%LOCALAPPDATA%\MobileExamFelica\bindings.dat`、読み取ったカードバックアップは `%LOCALAPPDATA%\MobileExamFelica\card-backups.dat` にWindowsユーザー単位のDPAPIで暗号化して保存します。バックアップにはSHA-256を付けます。通常の健診画面からは、まだカードへの書込みを呼び出しません。
+補助アプリは `127.0.0.1:8765` だけで待ち受けます。紐付け情報は `%LOCALAPPDATA%\MobileExamFelica\bindings.dat`、読み取ったカードバックアップは `%LOCALAPPDATA%\MobileExamFelica\card-backups.dat` にWindowsユーザー単位のDPAPIで暗号化して保存します。バックアップにはSHA-256を付けます。
 
 ### カード内バックアップ形式
 

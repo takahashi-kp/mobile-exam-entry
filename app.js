@@ -246,7 +246,6 @@ const identityEditButton = document.querySelector("#editPatientIdentity");
 const patientAgeDisplay = document.querySelector("#patientAgeDisplay");
 const felicaStatus = document.querySelector("#felicaStatus");
 const felicaReadCardButton = document.querySelector("#felicaReadCard");
-const felicaBindPatientButton = document.querySelector("#felicaBindPatient");
 const receptionPatientCode = document.querySelector("#receptionPatientCode");
 const receptionState = document.querySelector("#receptionState");
 const receptionActions = document.querySelector("#receptionActions");
@@ -596,7 +595,6 @@ function bindUi() {
   document.querySelector("#saveRecord").addEventListener("click", saveCurrentRecord);
   identityEditButton?.addEventListener("click", () => setPatientIdentityEditable(true));
   felicaReadCardButton?.addEventListener("click", readFelicaCardAndOpenPatient);
-  felicaBindPatientButton?.addEventListener("click", bindFelicaToCurrentPatient);
   document.querySelector("#lookupReceptionPatient")?.addEventListener("click", lookupReceptionPatient);
   receptionPatientCode?.addEventListener("keydown", (event) => {
     if (event.key !== "Enter") return;
@@ -705,7 +703,7 @@ async function readFelicaCardAndOpenPatient() {
     const card = await readFelicaCard();
     const result = await felicaRequest("/binding/lookup", { idm: card.idm });
     if (!result.binding) {
-      toast("未登録のカードです。受診者を表示して「この受診者に登録」を押してください。", true);
+      toast("未登録のカードです。受付画面で受診者を登録してください。", true);
       return;
     }
     const currentGroupId = String(activeGroup?.id || "");
@@ -713,49 +711,26 @@ async function readFelicaCardAndOpenPatient() {
       toast("このカードは現在とは別の予定グループに登録されています。", true);
       return;
     }
-    await loadEntryForPersonalNumber(result.binding.patientCode);
-    await switchView("entry");
+    const patientCode = String(result.binding.patientCode || "");
+    const currentCode = String(form.elements.namedItem("個人番号")?.value || "").trim();
+    if (activeEntryGroup && entryGroupDirty && currentCode !== patientCode) {
+      toast("前の受診者に未登録の入力があります。登録または取消後にカードを読み直してください。", true);
+      return;
+    }
+    boothCardPresent = true;
+    boothCardIdm = card.idm;
+    boothCardPatientCode = patientCode;
+    boothCardGroupId = String(result.binding.groupId || "");
+    await loadEntryForPersonalNumber(patientCode);
+    if (document.body.dataset.view !== "entry") await switchView("entry");
+    await updateEntryVerificationUi();
+    if (activeEntryGroup === "採血") requestAnimationFrame(() => bloodTubeBarcode?.focus());
     toast("FeliCaで受診者を確認しました");
   } catch (error) {
     setFelicaStatus("カード読取エラー", "error");
     toast(`カードを読み取れません。カードを置き直してください。${error.message ? ` (${error.message})` : ""}`, true);
   } finally {
     felicaReadCardButton.disabled = false;
-    felicaBusy = false;
-  }
-}
-
-async function bindFelicaToCurrentPatient() {
-  if (felicaBusy) return;
-  const patientCode = String(form.elements.namedItem("個人番号")?.value || "").trim();
-  const groupId = String(activeGroup?.id || "");
-  if (!patientCode) {
-    toast("先に受診者を選択してください。", true);
-    return;
-  }
-  if (!groupId) {
-    toast("先に予定グループを選択してください。", true);
-    return;
-  }
-  felicaBusy = true;
-  felicaBindPatientButton.disabled = true;
-  try {
-    const card = await readFelicaCard();
-    const request = { idm: card.idm, patientCode, groupId, overwrite: false };
-    try {
-      await felicaRequest("/binding/save", request);
-    } catch (error) {
-      if (error.status !== 409) throw error;
-      const existingCode = error.result?.binding?.patientCode || "別の受診者";
-      if (!window.confirm(`このカードは個人番号 ${existingCode} に登録済みです。現在の受診者へ登録し直しますか？`)) return;
-      await felicaRequest("/binding/save", { ...request, overwrite: true });
-    }
-    toast("FeliCaをこの受診者に登録しました");
-  } catch (error) {
-    setFelicaStatus("登録エラー", "error");
-    toast(`FeliCaを登録できませんでした。${error.message ? ` (${error.message})` : ""}`, true);
-  } finally {
-    felicaBindPatientButton.disabled = false;
     felicaBusy = false;
   }
 }
@@ -1059,7 +1034,7 @@ async function writeConfirmedExamSnapshotToFelica(groupKey) {
     const bindingResult = await felicaRequest("/binding/lookup", { idm: card.idm });
     const binding = bindingResult.binding;
     if (!binding) {
-      throw new Error("このカードは受診者に未登録です。画面上部の「この受診者に登録」を先に押してください");
+      throw new Error("このカードは受診者に未登録です。受付画面でカード受付を先に行ってください");
     }
     if (String(binding.patientCode) !== patientCode || String(binding.groupId) !== groupId) {
       throw new Error("このカードは表示中の受診者に登録されていません");
