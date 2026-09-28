@@ -137,6 +137,51 @@ h2 {
   padding: 10px clamp(16px, 4vw, 32px);
 }
 
+.felica-controls {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.felica-controls button {
+  min-height: 34px;
+  padding: 6px 9px;
+}
+
+.felica-status {
+  background: #f5f7f6;
+  border: 1px solid #9eaaa6;
+  border-radius: 5px;
+  color: #46514e;
+  font-size: 12px;
+  padding: 6px 8px;
+  white-space: nowrap;
+}
+
+.felica-status.is-ready {
+  background: #e7f5ed;
+  border-color: #67a67e;
+  color: #175d35;
+}
+
+.felica-status.is-error {
+  background: #fff0ef;
+  border-color: #d69690;
+  color: #8b241b;
+}
+
+@media (max-width: 900px) {
+  .felica-controls {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .felica-status {
+    flex: 1;
+  }
+}
+
 body:not([data-view="entry"]):not([data-view="questionnaire"]) .patient-sticky {
   display: none;
 }

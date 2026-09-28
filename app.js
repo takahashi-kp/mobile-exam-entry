@@ -2,6 +2,7 @@ import { ageOnDate, evaluateGuidanceAge, formatJapaneseDate } from "./guidance.j
 
 const DB_NAME = "mobile-exam-entry";
 const DEFAULT_CLOUD_URL = "https://mobile-exam-entry-b6w9-z574.onrender.com/api/exam-records";
+const FELICA_HELPER_URL = "http://127.0.0.1:8765";
 const STORE = "records";
 const SETTINGS = "settings";
 const SCHEDULE_GROUPS = "scheduleGroups";
@@ -240,6 +241,9 @@ const patientSummary = document.querySelector("#patientSummary");
 const activeGroupLabel = document.querySelector("#activeGroupLabel");
 const identityEditButton = document.querySelector("#editPatientIdentity");
 const patientAgeDisplay = document.querySelector("#patientAgeDisplay");
+const felicaStatus = document.querySelector("#felicaStatus");
+const felicaReadCardButton = document.querySelector("#felicaReadCard");
+const felicaBindPatientButton = document.querySelector("#felicaBindPatient");
 const bloodTubeBarcode = document.querySelector("#bloodTubeBarcode");
 const bloodBarcodeError = document.querySelector("#bloodBarcodeError");
 const bloodConfirmationRows = document.querySelector("#bloodConfirmationRows");
@@ -259,6 +263,8 @@ let activeEntryGroup = "";
 let entryGroupDirty = false;
 let bloodScanQueue = Promise.resolve();
 let personalChangeQueue = Promise.resolve();
+let lastFelicaCard = null;
+let felicaBusy = false;
 const questionnaireChoiceState = new WeakMap();
 
 init();
@@ -272,6 +278,7 @@ async function init() {
   setupCollapsibleGroups();
   showEntryMenu();
   bindUi();
+  checkFelicaHelper();
   await loadSettings();
   await prepareSyncSchemaV2();
   if (navigator.onLine) await syncAndRefresh({ force: true });
@@ -569,6 +576,8 @@ function bindUi() {
   document.addEventListener("change", markDirtyFromEvent);
   document.querySelector("#saveRecord").addEventListener("click", saveCurrentRecord);
   identityEditButton?.addEventListener("click", () => setPatientIdentityEditable(true));
+  felicaReadCardButton?.addEventListener("click", readFelicaCardAndOpenPatient);
+  felicaBindPatientButton?.addEventListener("click", bindFelicaToCurrentPatient);
   document.querySelector("#saveQuestionnaire")?.addEventListener("click", saveQuestionnaireRecord);
   document.querySelector("#newRecord").addEventListener("click", async () => {
     if (await confirmSaveBeforeLeaving()) {
@@ -616,6 +625,109 @@ function bindUi() {
   ["氏名", "カナ氏名", "性別名称", "生年月日"].forEach((name) => {
     form.elements.namedItem(name)?.addEventListener("input", updatePatientSummary);
   });
+}
+
+async function felicaRequest(path, body) {
+  const response = await fetch(`${FELICA_HELPER_URL}${path}`, {
+    method: body === undefined ? "GET" : "POST",
+    headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+    cache: "no-store"
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || !result.ok) {
+    const error = new Error(result.error || `FeliCa補助アプリとの通信に失敗しました（${response.status}）`);
+    error.status = response.status;
+    error.result = result;
+    throw error;
+  }
+  return result;
+}
+
+function setFelicaStatus(message, state = "") {
+  if (!felicaStatus) return;
+  felicaStatus.textContent = message;
+  felicaStatus.classList.toggle("is-ready", state === "ready");
+  felicaStatus.classList.toggle("is-error", state === "error");
+}
+
+async function checkFelicaHelper() {
+  try {
+    await felicaRequest("/health");
+    setFelicaStatus("FeliCa接続可", "ready");
+  } catch {
+    setFelicaStatus("FeliCa補助アプリ未起動", "error");
+  }
+}
+
+async function readFelicaCard() {
+  const card = await felicaRequest("/card/read", {});
+  lastFelicaCard = card;
+  setFelicaStatus(`カード ${card.idm.slice(-4)} 読取済`, "ready");
+  return card;
+}
+
+async function readFelicaCardAndOpenPatient() {
+  if (felicaBusy) return;
+  felicaBusy = true;
+  felicaReadCardButton.disabled = true;
+  try {
+    const card = await readFelicaCard();
+    const result = await felicaRequest("/binding/lookup", { idm: card.idm });
+    if (!result.binding) {
+      toast("未登録のカードです。受診者を表示して「この受診者に登録」を押してください。", true);
+      return;
+    }
+    const currentGroupId = String(activeGroup?.id || "");
+    if (currentGroupId && String(result.binding.groupId) !== currentGroupId) {
+      toast("このカードは現在とは別の予定グループに登録されています。", true);
+      return;
+    }
+    await loadEntryForPersonalNumber(result.binding.patientCode);
+    await switchView("entry");
+    toast("FeliCaで受診者を確認しました");
+  } catch (error) {
+    setFelicaStatus("カード読取エラー", "error");
+    toast(`カードを読み取れません。カードを置き直してください。${error.message ? ` (${error.message})` : ""}`, true);
+  } finally {
+    felicaReadCardButton.disabled = false;
+    felicaBusy = false;
+  }
+}
+
+async function bindFelicaToCurrentPatient() {
+  if (felicaBusy) return;
+  const patientCode = String(form.elements.namedItem("個人番号")?.value || "").trim();
+  const groupId = String(activeGroup?.id || "");
+  if (!patientCode) {
+    toast("先に受診者を選択してください。", true);
+    return;
+  }
+  if (!groupId) {
+    toast("先に予定グループを選択してください。", true);
+    return;
+  }
+  felicaBusy = true;
+  felicaBindPatientButton.disabled = true;
+  try {
+    const card = await readFelicaCard();
+    const request = { idm: card.idm, patientCode, groupId, overwrite: false };
+    try {
+      await felicaRequest("/binding/save", request);
+    } catch (error) {
+      if (error.status !== 409) throw error;
+      const existingCode = error.result?.binding?.patientCode || "別の受診者";
+      if (!window.confirm(`このカードは個人番号 ${existingCode} に登録済みです。現在の受診者へ登録し直しますか？`)) return;
+      await felicaRequest("/binding/save", { ...request, overwrite: true });
+    }
+    toast("FeliCaをこの受診者に登録しました");
+  } catch (error) {
+    setFelicaStatus("登録エラー", "error");
+    toast(`FeliCaを登録できませんでした。${error.message ? ` (${error.message})` : ""}`, true);
+  } finally {
+    felicaBindPatientButton.disabled = false;
+    felicaBusy = false;
+  }
 }
 
 function markDirtyFromEvent(event) {
