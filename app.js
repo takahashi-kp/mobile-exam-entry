@@ -1,4 +1,5 @@
 import { ageOnDate, evaluateGuidanceAge, formatJapaneseDate } from "./guidance.js?v=20260713-01";
+import { bytesToHex, encodeFelicaExamPayload } from "./felica-payload.mjs?v=20260928-01";
 
 const DB_NAME = "mobile-exam-entry";
 const DEFAULT_CLOUD_URL = "https://mobile-exam-entry-b6w9-z574.onrender.com/api/exam-records";
@@ -13,6 +14,7 @@ const SCHEDULE_CSV_HEADERS = ["受診者コード", "氏名", "カナ氏名", "�
 const EXAM_GROUP_VALUES = "examGroupValues";
 const PROGRESS_SUMMARIES = "progressSummaries";
 const QUESTIONNAIRE_RESPONSES = "questionnaireResponses";
+let felicaHelperReady = false;
 
 const URINE_TESTS = [
   { name: "尿蛋白定性", options: ["－", "±", "＋", "＋＋", "＋＋＋"] },
@@ -593,6 +595,7 @@ function bindUi() {
   document.querySelector("#backToEntryMenu")?.addEventListener("click", returnToEntryMenu);
   document.querySelector("#registerEntryGroup")?.addEventListener("click", registerActiveEntryGroup);
   document.querySelector("#confirmEntryGroup")?.addEventListener("click", confirmActiveEntryGroup);
+  document.querySelector("#writeEntryGroupToFelica")?.addEventListener("click", retryActiveEntryGroupFelicaWrite);
   bloodTubeBarcode?.addEventListener("keydown", handleBloodTubeBarcodeKeydown);
   document.querySelector("#refreshDiagnosisReference")?.addEventListener("click", renderDiagnosisReference);
   document.querySelector("#scheduleCsv").addEventListener("change", importScheduleCsv);
@@ -654,8 +657,10 @@ function setFelicaStatus(message, state = "") {
 async function checkFelicaHelper() {
   try {
     await felicaRequest("/health");
+    felicaHelperReady = true;
     setFelicaStatus("FeliCa接続可", "ready");
   } catch {
+    felicaHelperReady = false;
     setFelicaStatus("FeliCa補助アプリ未起動", "error");
   }
 }
@@ -727,6 +732,63 @@ async function bindFelicaToCurrentPatient() {
   } finally {
     felicaBindPatientButton.disabled = false;
     felicaBusy = false;
+  }
+}
+
+async function writeConfirmedExamSnapshotToFelica(groupKey) {
+  if (!felicaHelperReady) return { written: false, reason: "helper-unavailable" };
+  if (felicaBusy) return { written: false, reason: "busy" };
+  const record = await getCurrentRecord();
+  if (!record) return { written: false, reason: "record-unavailable" };
+  const patientCode = String(record.patientCode || record.data?.["個人番号"] || "").trim();
+  const groupId = String(record.scheduleGroupId || activeGroup?.id || "").trim();
+  if (!patientCode || !groupId) return { written: false, reason: "identity-unavailable" };
+
+  felicaBusy = true;
+  try {
+    setFelicaStatus("カードを確認中...", "ready");
+    const card = await readFelicaCard();
+    const bindingResult = await felicaRequest("/binding/lookup", { idm: card.idm });
+    const binding = bindingResult.binding;
+    if (!binding || String(binding.patientCode) !== patientCode || String(binding.groupId) !== groupId) {
+      throw new Error("このカードは表示中の受診者に登録されていません");
+    }
+    const groupValues = await getGroupValuesForRecord(record);
+    const payload = encodeFelicaExamPayload({ groupId, patientCode, groupValues });
+    const result = await felicaRequest("/card/write", {
+      idm: card.idm,
+      payloadHex: bytesToHex(payload),
+      allowWrite: true,
+      confirmation: "WRITE_AND_VERIFY"
+    });
+    const writtenAt = new Date().toISOString();
+    const currentItem = groupValues.find((item) => item.groupKey === groupKey);
+    if (currentItem) {
+      await put(EXAM_GROUP_VALUES, {
+        ...currentItem,
+        felicaWrittenAt: writtenAt,
+        felicaIdmSuffix: card.idm.slice(-4),
+        felicaSequence: result.sequence ?? result.activeSequence ?? ""
+      });
+    }
+    setFelicaStatus(`カード ${card.idm.slice(-4)} 反映済`, "ready");
+    return { written: true, result, payloadBytes: payload.length };
+  } catch (error) {
+    setFelicaStatus("カード未反映", "error");
+    return { written: false, reason: "write-failed", error };
+  } finally {
+    felicaBusy = false;
+  }
+}
+
+function showFelicaSaveResult(result, successMessage) {
+  if (result.written) {
+    toast(`${successMessage} FeliCaにも保存しました（${result.payloadBytes}バイト）。`);
+  } else if (result.reason === "helper-unavailable") {
+    toast(`${successMessage} FeliCa補助アプリが未起動のため、カードには未反映です。`);
+  } else {
+    const detail = result.error?.message ? ` ${result.error.message}` : "";
+    toast(`${successMessage} 端末には保存済みですが、FeliCaには反映できませんでした。${detail}`, true);
   }
 }
 
@@ -985,6 +1047,7 @@ async function updateEntryVerificationUi() {
   const detail = document.querySelector("#entryVerificationDetail");
   const registerButton = document.querySelector("#registerEntryGroup");
   const confirmButton = document.querySelector("#confirmEntryGroup");
+  const felicaButton = document.querySelector("#writeEntryGroupToFelica");
   if (!panel || !isVerifiableEntryGroup(activeEntryGroup)) {
     if (panel) panel.hidden = true;
     return;
@@ -999,6 +1062,7 @@ async function updateEntryVerificationUi() {
   badge.className = `verification-badge ${state}`;
   confirmButton.hidden = isDiagnosis || state !== "draft" || (isBlood && !bloodReady);
   registerButton.hidden = isBlood || state === "draft" || state === "confirmed";
+  felicaButton.hidden = state !== "confirmed";
   if (state === "dirty") {
     badge.textContent = "未登録変更あり";
     title.textContent = "入力内容はまだ保存されていません";
@@ -1013,7 +1077,10 @@ async function updateEntryVerificationUi() {
   } else if (state === "confirmed") {
     badge.textContent = isDiagnosis ? "登録済み・確定" : "利用者確認済み・確定";
     title.textContent = "この検査結果は最終確定されています";
-    detail.textContent = `${formatVerificationDate(item?.confirmedAt || item?.updatedAt)} に確定しました。変更すると再確認が必要です。`;
+    const cardStatus = item?.felicaWrittenAt
+      ? ` FeliCa反映: ${formatVerificationDate(item.felicaWrittenAt)}（カード末尾 ${item.felicaIdmSuffix}）`
+      : felicaHelperReady ? " FeliCaには未反映です。" : "";
+    detail.textContent = `${formatVerificationDate(item?.confirmedAt || item?.updatedAt)} に確定しました。${cardStatus} 変更すると再確認が必要です。`;
   } else {
     badge.textContent = "未入力";
     title.textContent = "この検査結果は未登録です";
@@ -1047,7 +1114,14 @@ async function registerActiveEntryGroup(options = {}) {
   entryGroupDirty = false;
   await updateEntryVerificationUi();
   await updateEntryMenuStatuses();
-  if (!options.silent) toast(activeEntryGroup === "診察" ? "診察を確定しました。" : `${activeEntryGroup}を仮保存しました。利用者確認はまだ完了していません。`);
+  if (activeEntryGroup === "診察" && !options.silent) {
+    const cardResult = await writeConfirmedExamSnapshotToFelica(activeEntryGroup);
+    showFelicaSaveResult(cardResult, "診察を確定しました。");
+  } else if (activeEntryGroup === "診察") {
+    // Silent saves are used while navigating; card writes require an explicit confirmation action.
+  } else if (!options.silent) {
+    toast(`${activeEntryGroup}を仮保存しました。利用者確認はまだ完了していません。`);
+  }
   return true;
 }
 
@@ -1075,7 +1149,21 @@ async function confirmActiveEntryGroup() {
   entryGroupDirty = false;
   await updateEntryVerificationUi();
   await updateEntryMenuStatuses();
+  const cardResult = await writeConfirmedExamSnapshotToFelica(activeEntryGroup);
+  showFelicaSaveResult(cardResult, `${activeEntryGroup}を確認済みにしました。`);
+  await updateEntryVerificationUi();
   focusPersonalNumberForNextPatient();
+}
+
+async function retryActiveEntryGroupFelicaWrite() {
+  const item = await getCurrentGroupValue(activeEntryGroup);
+  if (!item || groupVerificationState(item) !== "confirmed") {
+    toast("先に検査結果を確定してください。", true);
+    return;
+  }
+  const result = await writeConfirmedExamSnapshotToFelica(activeEntryGroup);
+  showFelicaSaveResult(result, `${activeEntryGroup}の確定済みデータを`);
+  await updateEntryVerificationUi();
 }
 
 function handleBloodTubeBarcodeKeydown(event) {
