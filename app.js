@@ -758,7 +758,10 @@ async function writeConfirmedExamSnapshotToFelica(groupKey) {
     const card = await readFelicaCard();
     const bindingResult = await felicaRequest("/binding/lookup", { idm: card.idm });
     const binding = bindingResult.binding;
-    if (!binding || String(binding.patientCode) !== patientCode || String(binding.groupId) !== groupId) {
+    if (!binding) {
+      throw new Error("このカードは受診者に未登録です。画面上部の「この受診者に登録」を先に押してください");
+    }
+    if (String(binding.patientCode) !== patientCode || String(binding.groupId) !== groupId) {
       throw new Error("このカードは表示中の受診者に登録されていません");
     }
     const groupValues = await getGroupValuesForRecord(record);
