@@ -621,7 +621,6 @@ function bindUi() {
   document.querySelector("#backToEntryMenu")?.addEventListener("click", returnToEntryMenu);
   document.querySelector("#registerEntryGroup")?.addEventListener("click", registerActiveEntryGroup);
   document.querySelector("#confirmEntryGroup")?.addEventListener("click", confirmActiveEntryGroup);
-  document.querySelector("#writeEntryGroupToFelica")?.addEventListener("click", retryActiveEntryGroupFelicaWrite);
   bloodTubeBarcode?.addEventListener("keydown", handleBloodTubeBarcodeKeydown);
   document.querySelector("#refreshDiagnosisReference")?.addEventListener("click", renderDiagnosisReference);
   document.querySelector("#scheduleCsv").addEventListener("change", importScheduleCsv);
@@ -1368,7 +1367,6 @@ async function updateEntryVerificationUi() {
   const detail = document.querySelector("#entryVerificationDetail");
   const registerButton = document.querySelector("#registerEntryGroup");
   const confirmButton = document.querySelector("#confirmEntryGroup");
-  const felicaButton = document.querySelector("#writeEntryGroupToFelica");
   if (!panel || !isVerifiableEntryGroup(activeEntryGroup)) {
     if (panel) panel.hidden = true;
     return;
@@ -1381,9 +1379,12 @@ async function updateEntryVerificationUi() {
   const bloodReady = isBlood && String(form.elements.namedItem("採血確認")?.value || item?.values?.["採血確認"] || "").trim() === "済";
   panel.className = `entry-verification-actions state-${state}`;
   badge.className = `verification-badge ${state}`;
-  confirmButton.hidden = isDiagnosis || isBlood || state !== "draft";
+  const cardNeedsWrite = activeBoothCanWriteFelica() && !item?.felicaWrittenAt;
+  confirmButton.hidden = isDiagnosis || isBlood
+    ? !(state === "confirmed" && cardNeedsWrite)
+    : !(state === "draft" || (state === "confirmed" && cardNeedsWrite));
+  confirmButton.textContent = "確認";
   registerButton.hidden = isBlood || state === "draft" || state === "confirmed";
-  felicaButton.hidden = state !== "confirmed" || !activeBoothCanWriteFelica();
   if (state === "dirty") {
     badge.textContent = "未登録変更あり";
     title.textContent = "入力内容はまだ保存されていません";
@@ -1449,7 +1450,16 @@ async function registerActiveEntryGroup(options = {}) {
 async function confirmActiveEntryGroup() {
   if (!isVerifiableEntryGroup(activeEntryGroup) || entryGroupDirty) return;
   const item = await getCurrentGroupValue(activeEntryGroup);
-  if (!item || groupVerificationState(item) !== "draft") {
+  const currentState = groupVerificationState(item);
+  if (currentState === "confirmed") {
+    if (activeBoothCanWriteFelica()) {
+      const cardResult = await writeConfirmedExamSnapshotToFelica(activeEntryGroup);
+      showFelicaSaveResult(cardResult, `${activeEntryGroup}を確認しました。`);
+      await updateEntryVerificationUi();
+    }
+    return;
+  }
+  if (!item || currentState !== "draft") {
     toast("先に「登録（仮保存）」を行ってください。", true);
     return;
   }
@@ -1478,17 +1488,6 @@ async function confirmActiveEntryGroup() {
   }
   await updateEntryVerificationUi();
   focusPersonalNumberForNextPatient();
-}
-
-async function retryActiveEntryGroupFelicaWrite() {
-  const item = await getCurrentGroupValue(activeEntryGroup);
-  if (!item || groupVerificationState(item) !== "confirmed") {
-    toast("先に検査結果を確定してください。", true);
-    return;
-  }
-  const result = await writeConfirmedExamSnapshotToFelica(activeEntryGroup);
-  showFelicaSaveResult(result, `${activeEntryGroup}の確定済みデータを`);
-  await updateEntryVerificationUi();
 }
 
 function handleBloodTubeBarcodeKeydown(event) {
@@ -1546,7 +1545,7 @@ async function processBloodTubeBarcode(scannedCode) {
     renderBloodConfirmationLog();
     await updateEntryVerificationUi();
     await updateEntryMenuStatuses();
-    toast(activeBoothCanWriteFelica() ? "採血管を確認しました。FeliCaへ反映してください。" : "採血管を確認し、採血を確定しました。" );
+    toast(activeBoothCanWriteFelica() ? "採血管を確認しました。「確認」を押してください。" : "採血管を確認し、採血を確定しました。" );
   }
   requestAnimationFrame(() => bloodTubeBarcode?.focus());
 }
