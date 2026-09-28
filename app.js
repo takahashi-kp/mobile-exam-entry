@@ -1,5 +1,5 @@
 import { ageOnDate, evaluateGuidanceAge, formatJapaneseDate } from "./guidance.js?v=20260713-01";
-import { bytesToHex, encodeFelicaExamPayload } from "./felica-payload.mjs?v=20260928-01";
+import { bytesToHex, decodeFelicaExamPayload, encodeFelicaExamPayload, extractFelicaExamPayload, patientHashFor } from "./felica-payload.mjs?v=20260928-02";
 
 const DB_NAME = "mobile-exam-entry";
 const DEFAULT_CLOUD_URL = "https://mobile-exam-entry-b6w9-z574.onrender.com/api/exam-records";
@@ -249,6 +249,7 @@ const felicaReadCardButton = document.querySelector("#felicaReadCard");
 const receptionPatientCode = document.querySelector("#receptionPatientCode");
 const receptionState = document.querySelector("#receptionState");
 const receptionActions = document.querySelector("#receptionActions");
+const recoveryState = document.querySelector("#recoveryState");
 const bloodTubeBarcode = document.querySelector("#bloodTubeBarcode");
 const bloodBarcodeError = document.querySelector("#bloodBarcodeError");
 const bloodConfirmationRows = document.querySelector("#bloodConfirmationRows");
@@ -277,6 +278,8 @@ let boothCardPatientCode = "";
 let boothCardGroupId = "";
 let receptionPatient = null;
 let receptionWaitToken = 0;
+const recoveryResults = [];
+const recoveredCardVersions = new Set();
 const questionnaireChoiceState = new WeakMap();
 
 init();
@@ -604,6 +607,7 @@ function bindUi() {
   document.querySelector("#armReceptionCard")?.addEventListener("click", armReceptionCard);
   document.querySelector("#receiveWithoutCard")?.addEventListener("click", receiveReceptionWithoutCard);
   document.querySelector("#clearReception")?.addEventListener("click", resetReceptionWorkflow);
+  document.querySelector("#scanRecoveryCard")?.addEventListener("click", recoverFromFelicaCard);
   document.querySelector("#saveQuestionnaire")?.addEventListener("click", saveQuestionnaireRecord);
   document.querySelector("#newRecord").addEventListener("click", async () => {
     if (await confirmSaveBeforeLeaving()) {
@@ -1010,6 +1014,132 @@ function delay(milliseconds) {
   return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 }
 
+function setRecoveryState(state, title, detail) {
+  if (!recoveryState) return;
+  recoveryState.dataset.state = state;
+  recoveryState.innerHTML = `<strong>${escapeHtml(title)}</strong><span>${escapeHtml(detail)}</span>`;
+}
+
+function refreshRecoveryView() {
+  const label = document.querySelector("#recoveryGroupLabel");
+  if (label) label.textContent = activeGroup
+    ? `${activeGroup.name}${activeGroup.scheduledDate ? ` / ${activeGroup.scheduledDate}` : ""}`
+    : "予定グループ未選択";
+  renderRecoveryRows();
+}
+
+async function recoverFromFelicaCard() {
+  const button = document.querySelector("#scanRecoveryCard");
+  if (!activeGroup) {
+    setRecoveryState("error", "予定グループが未選択です", "予定CSVを取り込み、予定管理から対象グループを開いてください。" );
+    return;
+  }
+  if (felicaBusy) return;
+  felicaBusy = true;
+  button.disabled = true;
+  setRecoveryState("reading", "カードを読み取っています", "復元が完了するまでカードを動かさないでください。" );
+  let cardIdm = "";
+  try {
+    const backup = await felicaRequest("/card/backup", {});
+    cardIdm = String(backup.idm || "");
+    const slot = extractFelicaExamPayload(backup.blocks);
+    const versionKey = `${cardIdm}:${slot.sequence}`;
+    if (recoveredCardVersions.has(versionKey)) {
+      setRecoveryState("warning", "このカードは読取済みです", `カード末尾 ${cardIdm.slice(-4)} / 世代 ${slot.sequence}` );
+      return;
+    }
+    const decoded = decodeFelicaExamPayload(slot.payload);
+    if (!decoded.groupValues.length) throw new Error("受付情報だけのカードで、復元できる検査値がありません。");
+    const patients = (await getAll(SCHEDULE_PATIENTS)).filter((patient) => patient.groupId === activeGroup.id);
+    const matches = patients.filter((patient) => patientHashFor(activeGroup.id, patient["受診者コード"] || "") === decoded.patientHash);
+    if (!matches.length) throw new Error("予定者リストに一致する受診者がいません。正しい予定CSVとグループを選択してください。");
+    if (matches.length > 1) throw new Error("照合値が重複しました。個人番号を自動特定できません。");
+    const patient = matches[0];
+    const patientData = plannedToData(patient);
+    const patientCode = patientData["個人番号"];
+    const now = new Date().toISOString();
+    const restoredAt = decoded.updatedAt || now;
+    const existingRecord = await findRecordByPatient(patientCode);
+    const record = {
+      id: existingRecord?.id || stableRecordId(activeGroup.id, patientCode),
+      entityType: "record_header",
+      createdAt: existingRecord?.createdAt || now,
+      updatedAt: now,
+      syncState: "pending",
+      lastSyncError: "",
+      scheduleGroupId: activeGroup.id,
+      scheduleGroupName: activeGroup.name || "",
+      patientCode,
+      patientKey: `${activeGroup.id}::${patientCode}`,
+      data: { ...patientData, ...(existingRecord?.data || {}), "個人番号": patientCode }
+    };
+    await put(STORE, record);
+    const existingGroups = new Map((await getGroupValuesForRecord(record)).map((item) => [item.groupKey, item]));
+    for (const restored of decoded.groupValues) {
+      const existing = existingGroups.get(restored.groupKey);
+      const definition = getProgressGroup(restored.groupKey);
+      await put(EXAM_GROUP_VALUES, {
+        id: stableGroupValueId(recordPatientKey(record), restored.groupKey),
+        entityType: "exam_group_value",
+        recordId: record.id,
+        tenantId: "local",
+        scheduleGroupId: activeGroup.id,
+        scheduleGroupName: activeGroup.name || "",
+        patientCode,
+        patientKey: `${activeGroup.id}::${patientCode}`,
+        groupKey: restored.groupKey,
+        groupLabel: definition?.label || restored.groupKey,
+        values: { ...(existing?.values || {}), ...restored.values },
+        version: (existing?.version || 0) + 1,
+        verificationStatus: "confirmed",
+        verificationUpdatedAt: restoredAt,
+        registeredAt: existing?.registeredAt || restoredAt,
+        confirmedAt: restoredAt,
+        recoveredFromFelicaAt: now,
+        recoveredCardIdmSuffix: cardIdm.slice(-4),
+        updatedAt: now,
+        syncState: "pending"
+      });
+    }
+    const assembled = await assembleRecordData(record);
+    await saveProgressSummary(record, assembled, now);
+    try {
+      await felicaRequest("/binding/save", { idm: cardIdm, patientCode, groupId: String(activeGroup.id), overwrite: true });
+    } catch {
+      // The exam records are already restored; binding can be rebuilt later without losing them.
+    }
+    await put(RECEPTIONS, {
+      id: receptionId(patientCode), entityType: "reception", scheduleGroupId: activeGroup.id,
+      scheduleGroupName: activeGroup.name || "", patientCode, patientName: patientData["氏名"] || "",
+      patientKana: patientData["カナ氏名"] || "", sex: patientData["性別名称"] || "",
+      birthDate: patientData["生年月日"] || "", method: "felica", cardIdm, receivedAt: now,
+      firstReceivedAt: now, deviceId: await getSyncDeviceId(), updatedAt: now, syncState: "local"
+    });
+    recoveredCardVersions.add(versionKey);
+    recoveryResults.unshift({ time: now, patientCode, name: patientData["氏名"] || "", groups: decoded.groupValues.length, card: cardIdm.slice(-4), result: "復元済" });
+    renderRecoveryRows();
+    await refreshRows();
+    setRecoveryState("complete", "復元しました", `${patientCode} ${patientData["氏名"] || ""} / ${decoded.groupValues.length}検査グループ` );
+  } catch (error) {
+    recoveryResults.unshift({ time: new Date().toISOString(), patientCode: "", name: "", groups: 0, card: cardIdm.slice(-4), result: error.message || "復元失敗", error: true });
+    renderRecoveryRows();
+    setRecoveryState("error", "復元できませんでした", error.message || "カードを置き直してください。" );
+  } finally {
+    button.disabled = false;
+    felicaBusy = false;
+  }
+}
+
+function renderRecoveryRows() {
+  const rows = document.querySelector("#recoveryRows");
+  if (!rows) return;
+  document.querySelector("#recoveryCount").textContent = `${recoveryResults.filter((item) => !item.error).length}件`;
+  rows.innerHTML = recoveryResults.length ? recoveryResults.map((item) => `<tr class="${item.error ? "recovery-error-row" : ""}">
+    <td>${escapeHtml(formatTime(item.time))}</td><td>${escapeHtml(item.patientCode)}</td><td>${escapeHtml(item.name)}</td>
+    <td>${item.groups ? `${item.groups}グループ` : "－"}</td><td>${escapeHtml(item.card || "－")}</td><td>${escapeHtml(item.result)}</td>
+  </tr>`).join("") : '<tr><td colspan="6">まだカードを読み取っていません。</td></tr>';
+}
+
 async function writeConfirmedExamSnapshotToFelica(groupKey) {
   if (felicaBusy) return { written: false, reason: "busy" };
   try {
@@ -1223,6 +1353,7 @@ async function switchView(view) {
     await refreshReceptionRows();
     requestAnimationFrame(() => receptionPatientCode?.focus());
   }
+  if (view === "recovery") refreshRecoveryView();
   if (view === "schedules") await refreshScheduleRows();
   if (view === "sync") await refreshCleanupSummary();
   if (view === "questionnaire") await updateQuestionnaireSexRules();

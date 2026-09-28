@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { bytesToHex, encodeFelicaExamPayload, inspectFelicaExamPayload } from "./felica-payload.mjs";
+import { bytesToHex, decodeFelicaExamPayload, encodeFelicaExamPayload, extractFelicaExamPayload, inspectFelicaExamPayload, patientHashFor } from "./felica-payload.mjs";
 
 test("confirmed exam groups fit into one FeliCa payload", () => {
   const confirmed = (groupKey, values) => ({ groupKey, values, verificationStatus: "confirmed", confirmedAt: "2026-09-28T01:02:00.000Z" });
@@ -27,6 +27,11 @@ test("confirmed exam groups fit into one FeliCa payload", () => {
   assert.equal(decoded.groups.length, 11);
   assert.equal(decoded.confirmedBitmap, 0x7ff);
   assert.match(bytesToHex(payload), /^[0-9A-F]+$/);
+  const restored = decodeFelicaExamPayload(payload);
+  assert.equal(restored.patientHash, patientHashFor("visit-1", "2026071501"));
+  assert.equal(restored.groupValues.find((item) => item.groupKey === "身体").values["身長"], "170.1");
+  assert.equal(restored.groupValues.find((item) => item.groupKey === "血圧").values["1回目最高血圧"], "120");
+  assert.equal(restored.groupValues.find((item) => item.groupKey === "診察").values["その他"], "要受診");
 });
 
 test("draft groups are not written to the card", () => {
@@ -38,4 +43,17 @@ test("draft groups are not written to the card", () => {
   const decoded = inspectFelicaExamPayload(payload);
   assert.equal(decoded.confirmedBitmap, 0);
   assert.deepEqual(decoded.groups, []);
+});
+
+test("newest valid A/B card slot is extracted", () => {
+  const hex = [
+    "4D4558310100170000000F016CACFACB", "4D45503101FCD9B88200000000000000",
+    ...Array(5).fill("00000000000000000000000000000000"),
+    "4D4558310101160000000F016CACFACB", "4D45503101FCD9B88200000000000000",
+    ...Array(5).fill("00000000000000000000000000000000")
+  ];
+  const slot = extractFelicaExamPayload(hex.map((value, number) => ({ number, hex: value })));
+  assert.equal(slot.index, 0);
+  assert.equal(slot.sequence, 23);
+  assert.equal(bytesToHex(slot.payload), "4D45503101FCD9B882000000000000");
 });
