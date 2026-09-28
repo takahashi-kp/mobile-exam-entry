@@ -32,14 +32,14 @@ python -m http.server 4173
 
 ## FeliCa本人確認（Windows 11 + PaSoRi RC-S300）
 
-有償SDKは使用せず、Windows標準のPC/SC機能でカードのIDmを読み取ります。
+有償SDKは使用せず、同梱のUSB読み取りプログラムでカードのIDm、PMm、FeliCa Lite-Sのユーザーブロックを読み取ります。RC-S300の両インターフェースには、事前にZadigでWinUSBドライバーを設定します。
 
 1. PaSoRiを接続し、FeliCa Lite-Sを置きます。
 2. `start-felica-helper.bat` をダブルクリックします。
 3. 健診画面で受診者を選び、「この受診者に登録」を押します。
 4. 以後は「カード読取」で紐付いた受診者を開けます。
 
-補助アプリは `127.0.0.1:8765` だけで待ち受けます。紐付け情報は `%LOCALAPPDATA%\MobileExamFelica\bindings.dat` にWindowsユーザー単位で暗号化して保存します。現段階ではカードへの書込みは行いません。
+補助アプリは `127.0.0.1:8765` だけで待ち受けます。紐付け情報は `%LOCALAPPDATA%\MobileExamFelica\bindings.dat`、読み取ったカードバックアップは `%LOCALAPPDATA%\MobileExamFelica\card-backups.dat` にWindowsユーザー単位のDPAPIで暗号化して保存します。バックアップにはSHA-256を付けます。現段階ではカードへの書込みは行いません。
 
 ## クラウド同期API
 

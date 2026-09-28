@@ -8,3 +8,6 @@ node_modules
 work/
 *.inspect.ndjson
 .venv/
+felica-native/target/
+tools/
+felica-webusb-test.html
