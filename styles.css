@@ -141,12 +141,18 @@ h2 {
   align-items: center;
   display: flex;
   gap: 6px;
-  margin-left: auto;
+  grid-column: 1 / -1;
+  justify-content: flex-start;
+  justify-self: start;
+  margin-left: 0;
+  max-width: 100%;
 }
 
 .felica-controls button {
+  flex: 0 0 auto;
   min-height: 34px;
   padding: 6px 9px;
+  white-space: nowrap;
 }
 
 .felica-status {
@@ -178,7 +184,7 @@ h2 {
   }
 
   .felica-status {
-    flex: 1;
+    flex: 0 1 auto;
   }
 }
 

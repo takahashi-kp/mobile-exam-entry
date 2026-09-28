@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#176c6a">
   <title>出張健診 検査項目入力</title>
   <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="stylesheet" href="./styles.css?v=20260928-01">
+  <link rel="stylesheet" href="./styles.css?v=20260928-02">
 </head>
 <body>
   <div class="app-toast" id="appToast" role="status" aria-live="polite"></div>
@@ -36,6 +36,11 @@
     </header>
     <div class="patient-sticky">
       <div class="form-grid id-row">
+        <div class="felica-controls" aria-label="FeliCa本人確認">
+          <span class="felica-status" id="felicaStatus">FeliCa補助アプリ未確認</span>
+          <button class="ghost" id="felicaReadCard" type="button">カード読取</button>
+          <button class="ghost" id="felicaBindPatient" type="button">この受診者に登録</button>
+        </div>
         <div class="guidance-badge" id="entryGuidanceBadge" hidden>指導</div>
         <label class="short-field reception-field">
           <span>受付番号</span>
@@ -67,11 +72,6 @@
         </label>
         <button class="ghost identity-edit-button" id="editPatientIdentity" type="button">修正</button>
         <div class="active-group-label" id="activeGroupLabel">予定グループ未選択</div>
-        <div class="felica-controls" aria-label="FeliCa本人確認">
-          <span class="felica-status" id="felicaStatus">FeliCa補助アプリ未確認</span>
-          <button class="ghost" id="felicaReadCard" type="button">カード読取</button>
-          <button class="ghost" id="felicaBindPatient" type="button">この受診者に登録</button>
-        </div>
       </div>
     </div>
   </div>
