@@ -53,13 +53,17 @@ function ConvertTo-Hashtable($Value) {
   return $Value
 }
 
-function Invoke-NativeFelicaReader {
+function Invoke-NativeFelicaCommand([string[]]$Arguments = @()) {
   if (-not (Test-Path -LiteralPath $NativeExe)) { return $null }
-  $output = & $NativeExe 2>&1
+  $output = & $NativeExe @Arguments 2>&1
   if (-not $output) { throw "The native FeliCa reader returned no data." }
   $result = ConvertTo-Hashtable ((($output | ForEach-Object { [string]$_ }) -join "`n") | ConvertFrom-Json)
   if (-not $result.ok) { throw ([string]$result.error) }
   return $result
+}
+
+function Invoke-NativeFelicaReader {
+  return Invoke-NativeFelicaCommand
 }
 
 function Assert-SCardResult([int]$Result, [string]$Operation) {
@@ -420,6 +424,26 @@ try {
         $backup = Get-FelicaUserBlocks
         if ($backup.ok) { Write-CardBackup $backup }
         Send-Response $writer 200 $backup $origin
+      } elseif ($method -eq 'POST' -and $path -eq '/card/write') {
+        $idm = ([string]$body.idm).Trim().ToUpperInvariant()
+        $payloadHex = ([string]$body.payloadHex).Trim().ToUpperInvariant()
+        if (-not [bool]$body.allowWrite -or [string]$body.confirmation -ne 'WRITE_AND_VERIFY') {
+          Send-Response $writer 400 @{ ok = $false; error = "Explicit write confirmation is required." } $origin
+          continue
+        }
+        if ($idm -notmatch '^[0-9A-F]{16}$' -or $payloadHex -notmatch '^(?:[0-9A-F]{2}){1,96}$') {
+          Send-Response $writer 400 @{ ok = $false; error = "A valid IDm and 1-96 byte hexadecimal payload are required." } $origin
+          continue
+        }
+        $backup = Get-FelicaUserBlocks
+        if (-not $backup.ok -or $backup.idm -ne $idm) {
+          Send-Response $writer 409 @{ ok = $false; error = "Card backup or IDm verification failed."; card = $backup } $origin
+          continue
+        }
+        Write-CardBackup $backup
+        $write = Invoke-NativeFelicaCommand @('--write-hex', $payloadHex, '--confirm-idm', $idm)
+        $write.backupSha256 = $backup.sha256
+        Send-Response $writer 200 $write $origin
       } elseif ($method -eq 'POST' -and $path -eq '/binding/lookup') {
         $idm = ([string]$body.idm).Trim().ToUpperInvariant()
         if ($idm -notmatch '^[0-9A-F]{16}$') { Send-Response $writer 400 @{ ok = $false; error = "Invalid IDm." } $origin; continue }

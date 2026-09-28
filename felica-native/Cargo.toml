@@ -5,6 +5,7 @@ edition = "2024"
 license = "MIT"
 
 [dependencies]
+crc32fast = "1.5"
 felica = "=1.0.3"
 hex = "0.4"
 rusb = "0.9"
