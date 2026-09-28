@@ -358,7 +358,9 @@ function Get-RequestBody($Reader, [int]$ContentLength) {
 $allowedOrigins = @(
   "https://mobile-exam-entry-b6w9-z574.onrender.com",
   "http://127.0.0.1:4173",
-  "http://localhost:4173"
+  "http://localhost:4173",
+  "http://127.0.0.1:4174",
+  "http://localhost:4174"
 )
 
 function Send-Response($Writer, [int]$Status, $Payload, [string]$Origin = "") {

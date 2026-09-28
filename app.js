@@ -736,8 +736,16 @@ async function bindFelicaToCurrentPatient() {
 }
 
 async function writeConfirmedExamSnapshotToFelica(groupKey) {
-  if (!felicaHelperReady) return { written: false, reason: "helper-unavailable" };
   if (felicaBusy) return { written: false, reason: "busy" };
+  try {
+    await felicaRequest("/health");
+    felicaHelperReady = true;
+    setFelicaStatus("FeliCa接続可", "ready");
+  } catch (error) {
+    felicaHelperReady = false;
+    setFelicaStatus("FeliCa補助アプリ未起動", "error");
+    return { written: false, reason: "helper-unavailable", error };
+  }
   const record = await getCurrentRecord();
   if (!record) return { written: false, reason: "record-unavailable" };
   const patientCode = String(record.patientCode || record.data?.["個人番号"] || "").trim();
