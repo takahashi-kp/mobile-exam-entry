@@ -6,6 +6,7 @@ server.out.log
 Thumbs.db
 node_modules
 work/
+dist/
 *.inspect.ndjson
 .venv/
 felica-native/target/

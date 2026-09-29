@@ -207,6 +207,34 @@ const PROGRESS_GROUPS = [
   { label: "採血", target: "採血", fields: ["採血確認", "採血確認ログ", "採血管バーコード履歴"] },
   { label: "診察", target: "診察", fields: ["巡回診察", "結膜貧血", "甲状腺腫大", "心雑音", "脈の異常", "呼吸音異常", "その他", "その他_自由入力", "巡回診察_自由入力"] }
 ];
+const MOBILE_EXAM_GROUPS = {
+  "視力": {
+    label: "視力",
+    fields: [
+      { key: "視力右裸眼", label: "右 裸眼" },
+      { key: "視力右矯正", label: "右 矯正" },
+      { key: "視力左裸眼", label: "左 裸眼" },
+      { key: "視力左矯正", label: "左 矯正" }
+    ]
+  },
+  "血圧": {
+    label: "血圧",
+    fields: [
+      { key: "1回目最高血圧", label: "1回目 最高", unit: "mmHg" },
+      { key: "1回目最低血圧", label: "1回目 最低", unit: "mmHg" },
+      { key: "2回目最高血圧", label: "2回目 最高", unit: "mmHg" },
+      { key: "2回目最低血圧", label: "2回目 最低", unit: "mmHg" }
+    ]
+  },
+  "身体": {
+    label: "身体計測",
+    fields: [
+      { key: "身長", label: "身長", unit: "cm" },
+      { key: "体重", label: "体重", unit: "kg" },
+      { key: "腹囲", label: "腹囲", unit: "cm" }
+    ]
+  }
+};
 
 const form = document.querySelector("#examForm");
 const questionnaireForm = document.querySelector("#questionnaireForm");
@@ -219,6 +247,11 @@ const scheduleRows = document.querySelector("#scheduleRows");
 const searchRecords = document.querySelector("#searchRecords");
 const syncMessage = document.querySelector("#syncMessage");
 const appToast = document.querySelector("#appToast");
+const mobileExamForm = document.querySelector("#mobileExamForm");
+const mobilePatientLookup = document.querySelector("#mobilePatientLookup");
+const mobileExamWorkspace = document.querySelector("#mobileExamWorkspace");
+const mobilePatientCode = document.querySelector("#mobilePatientCode");
+const mobileBmi = document.querySelector("#mobileBmi");
 const cleanupSummary = document.querySelector("#cleanupSummary");
 const guidanceFields = {
   year: document.querySelector("#guidanceYear"),
@@ -266,6 +299,8 @@ let pullInProgress = false;
 let lastAutomaticRefreshAt = 0;
 let rosterExportInProgress = false;
 let activeEntryGroup = "";
+let activeMobileGroup = "視力";
+const mobileDirtyGroups = new Set();
 let entryGroupDirty = false;
 let bloodScanQueue = Promise.resolve();
 let personalChangeQueue = Promise.resolve();
@@ -286,6 +321,7 @@ init();
 
 async function init() {
   document.body.dataset.view = "entry";
+  document.body.classList.toggle("smartphone-device", isSmartphoneDevice());
   db = await openDb();
   renderUrineControls();
   renderFindingControls();
@@ -623,6 +659,19 @@ function bindUi() {
   document.querySelector("#backToEntryMenu")?.addEventListener("click", returnToEntryMenu);
   document.querySelector("#registerEntryGroup")?.addEventListener("click", registerActiveEntryGroup);
   document.querySelector("#confirmEntryGroup")?.addEventListener("click", confirmActiveEntryGroup);
+  document.querySelectorAll("[data-mobile-group]").forEach((button) => {
+    button.addEventListener("click", () => selectMobileExamGroup(button.dataset.mobileGroup));
+  });
+  document.querySelector("#loadMobilePatient")?.addEventListener("click", loadMobilePatient);
+  document.querySelector("#changeMobilePatient")?.addEventListener("click", changeMobilePatient);
+  document.querySelector("#confirmMobileExam")?.addEventListener("click", confirmMobileExam);
+  document.querySelector("#backFromMobileExam")?.addEventListener("click", () => switchView("entry"));
+  mobilePatientCode?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    loadMobilePatient();
+  });
+  mobileExamForm?.addEventListener("input", handleMobileExamInput);
   bloodTubeBarcode?.addEventListener("keydown", handleBloodTubeBarcodeKeydown);
   document.querySelector("#refreshDiagnosisReference")?.addEventListener("click", renderDiagnosisReference);
   document.querySelector("#scheduleCsv").addEventListener("change", importScheduleCsv);
@@ -639,9 +688,35 @@ function bindUi() {
   document.querySelector("#clearGuidance")?.addEventListener("click", clearGuidanceSelection);
   searchRecords.addEventListener("input", refreshRows);
   document.querySelector("#fastingHours").addEventListener("change", normalizeFastingHours);
-  document.querySelectorAll(".vision-input").forEach((input) => {
-    input.addEventListener("focus", () => input.select());
-    input.addEventListener("click", () => input.select());
+  document.querySelectorAll('input[list="visionOptions"]').forEach((input) => {
+    let previousValue = "";
+    let valueWasEdited = false;
+
+    input.addEventListener("pointerdown", () => {
+      if (document.activeElement === input || !input.value) return;
+      previousValue = input.value;
+      valueWasEdited = false;
+      input.value = "";
+    });
+    input.addEventListener("focus", () => {
+      input.select();
+      try {
+        input.showPicker?.();
+      } catch {
+        // Some browsers open the datalist themselves and reject showPicker().
+      }
+    });
+    input.addEventListener("input", () => {
+      valueWasEdited = true;
+    });
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Backspace" || event.key === "Delete") valueWasEdited = true;
+    });
+    input.addEventListener("blur", () => {
+      if (!valueWasEdited && !input.value && previousValue) input.value = previousValue;
+      previousValue = "";
+      valueWasEdited = false;
+    });
   });
   const personalInput = form.elements.namedItem("個人番号");
   const receptionInput = form.elements.namedItem("受付番号");
@@ -1327,6 +1402,12 @@ function handleExclusiveCheckboxes(event) {
 
 async function switchView(view) {
   const currentView = document.body.dataset.view || "entry";
+  if (currentView === "mobile" && view !== "mobile" && mobileDirtyGroups.size) {
+    const discard = window.confirm("スマホ入力に未確定の検査値があります。\n入力を破棄して移動しますか？");
+    if (!discard) return false;
+    mobileDirtyGroups.clear();
+    hydrateMobileExamFields();
+  }
   if (currentView === "reception" && view !== "reception") receptionWaitToken += 1;
   if (currentView === "entry" && view !== "entry" && entryGroupDirty && isVerifiableEntryGroup(activeEntryGroup)) {
     const shouldRegister = window.confirm("この検査には未登録の変更があります。\n登録（仮保存）して画面を移動しますか？");
@@ -1341,6 +1422,7 @@ async function switchView(view) {
   }
   document.body.dataset.view = view;
   if (view === "entry") showEntryMenu();
+  if (view === "mobile") await prepareMobileExamView();
   document.querySelectorAll("button[data-view]").forEach((button) => {
     button.classList.toggle("is-active", button.dataset.view === view);
   });
@@ -1368,6 +1450,170 @@ async function switchView(view) {
   return true;
 }
 
+function isSmartphoneDevice() {
+  if (navigator.userAgentData?.mobile === true) return true;
+  if (/iPhone|iPod|Android.+Mobile/i.test(navigator.userAgent || "")) return true;
+  return window.matchMedia("(max-width: 640px)").matches;
+}
+
+async function prepareMobileExamView() {
+  const code = String(form.elements.namedItem("個人番号")?.value || "").trim();
+  if (!code) {
+    mobilePatientLookup.hidden = false;
+    mobileExamWorkspace.hidden = true;
+    requestAnimationFrame(() => mobilePatientCode?.focus());
+    return;
+  }
+  mobilePatientLookup.hidden = true;
+  mobileExamWorkspace.hidden = false;
+  hydrateMobilePatientLine();
+  hydrateMobileExamFields();
+  await selectMobileExamGroup(activeMobileGroup);
+}
+
+async function loadMobilePatient() {
+  const code = String(mobilePatientCode?.value || "").trim();
+  if (!code) {
+    toast("個人番号を入力してください。", true);
+    mobilePatientCode?.focus();
+    return;
+  }
+  if (mobileDirtyGroups.size && !window.confirm("未確定の検査値を破棄して受診者を変更しますか？")) return;
+  mobileDirtyGroups.clear();
+  await loadEntryForPersonalNumber(code);
+  mobilePatientLookup.hidden = true;
+  mobileExamWorkspace.hidden = false;
+  hydrateMobilePatientLine();
+  hydrateMobileExamFields();
+  await selectMobileExamGroup(activeMobileGroup);
+}
+
+function changeMobilePatient() {
+  if (mobileDirtyGroups.size && !window.confirm("未確定の検査値を破棄して受診者を変更しますか？")) return;
+  mobileDirtyGroups.clear();
+  mobileExamWorkspace.hidden = true;
+  mobilePatientLookup.hidden = false;
+  if (mobilePatientCode) mobilePatientCode.value = "";
+  requestAnimationFrame(() => mobilePatientCode?.focus());
+}
+
+function hydrateMobilePatientLine() {
+  const values = {
+    mobileIdentityCode: form.elements.namedItem("個人番号")?.value || "",
+    mobileIdentityKana: form.elements.namedItem("カナ氏名")?.value || "",
+    mobileIdentityName: form.elements.namedItem("氏名")?.value || "",
+    mobileIdentitySex: form.elements.namedItem("性別名称")?.value || "",
+    mobileIdentityBirth: form.elements.namedItem("生年月日")?.value || ""
+  };
+  Object.entries(values).forEach(([id, value]) => {
+    const element = document.querySelector(`#${id}`);
+    if (element) element.textContent = value || "--";
+  });
+}
+
+function hydrateMobileExamFields() {
+  mobileExamForm?.querySelectorAll("[data-mobile-field]").forEach((input) => {
+    input.value = form.elements.namedItem(input.dataset.mobileField)?.value || "";
+  });
+  updateMobileBmi();
+  renderMobileResultValues();
+}
+
+async function selectMobileExamGroup(groupKey) {
+  if (!MOBILE_EXAM_GROUPS[groupKey]) return;
+  activeMobileGroup = groupKey;
+  document.querySelectorAll("[data-mobile-group]").forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.mobileGroup === groupKey);
+  });
+  document.querySelectorAll("[data-mobile-panel]").forEach((panel) => {
+    panel.classList.toggle("is-active", panel.dataset.mobilePanel === groupKey);
+  });
+  renderMobileResultValues();
+  await updateMobileExamStatus();
+}
+
+function handleMobileExamInput(event) {
+  const input = event.target.closest?.("[data-mobile-field]");
+  if (!input) return;
+  sanitizeMobileNumericInput(input);
+  const group = Object.entries(MOBILE_EXAM_GROUPS)
+    .find(([, definition]) => definition.fields.some((field) => field.key === input.dataset.mobileField))?.[0];
+  if (group) mobileDirtyGroups.add(group);
+  updateMobileBmi();
+  renderMobileResultValues();
+  const confirmButton = document.querySelector("#confirmMobileExam");
+  if (confirmButton) confirmButton.textContent = "確認して確定";
+}
+
+function sanitizeMobileNumericInput(input) {
+  let value = String(input.value || "")
+    .replace(/[０-９]/g, (character) => String(character.charCodeAt(0) - 0xFF10))
+    .replace(/[．。]/g, ".")
+    .replace(/[^0-9.]/g, "");
+  const firstDot = value.indexOf(".");
+  if (firstDot >= 0) value = value.slice(0, firstDot + 1) + value.slice(firstDot + 1).replaceAll(".", "");
+  if (input.inputMode === "numeric") value = value.replaceAll(".", "");
+  if (input.maxLength > 0) value = value.slice(0, input.maxLength);
+  if (input.value !== value) input.value = value;
+}
+
+function getMobileFieldValue(fieldKey) {
+  return String(mobileExamForm?.querySelector(`[data-mobile-field="${cssEscape(fieldKey)}"]`)?.value || "").trim();
+}
+
+function updateMobileBmi() {
+  if (!mobileBmi) return;
+  const height = Number(getMobileFieldValue("身長"));
+  const weight = Number(getMobileFieldValue("体重"));
+  const bmi = height > 0 && weight > 0 ? weight / ((height / 100) ** 2) : NaN;
+  mobileBmi.textContent = Number.isFinite(bmi) ? bmi.toFixed(1) : "--";
+}
+
+function renderMobileResultValues() {
+  const definition = MOBILE_EXAM_GROUPS[activeMobileGroup];
+  const rows = definition.fields
+    .map((field) => ({ ...field, value: getMobileFieldValue(field.key) }))
+    .filter((field) => field.value);
+  const confirmButton = document.querySelector("#confirmMobileExam");
+  if (confirmButton) confirmButton.disabled = rows.length === 0;
+}
+
+async function updateMobileExamStatus() {
+  const item = await getCurrentGroupValue(activeMobileGroup);
+  const confirmed = groupVerificationState(item) === "confirmed" && !mobileDirtyGroups.has(activeMobileGroup);
+  const confirmButton = document.querySelector("#confirmMobileExam");
+  if (confirmButton) confirmButton.textContent = confirmed ? "確定済み" : "確認して確定";
+}
+
+async function confirmMobileExam() {
+  const code = String(form.elements.namedItem("個人番号")?.value || "").trim();
+  const definition = MOBILE_EXAM_GROUPS[activeMobileGroup];
+  if (!code || !definition) {
+    toast("受診者を選択してください。", true);
+    return;
+  }
+  const values = Object.fromEntries(definition.fields.map((field) => [field.key, getMobileFieldValue(field.key)]));
+  if (!Object.values(values).some(Boolean)) {
+    toast("検査値を入力してください。", true);
+    return;
+  }
+  setProgrammaticFormChange(() => {
+    Object.entries(values).forEach(([fieldName, value]) => {
+      const field = form.elements.namedItem(fieldName);
+      if (field) field.value = value;
+    });
+  });
+  const saved = await saveRecordData(formToRecord(), {
+    silent: true,
+    groupTarget: activeMobileGroup,
+    verificationStatus: "confirmed"
+  });
+  if (!saved) return;
+  mobileDirtyGroups.delete(activeMobileGroup);
+  await updateMobileExamStatus();
+  toast(`${definition.label}を確認済みにしました。`);
+}
+
 function showEntryMenu() {
   activeEntryGroup = "";
   entryGroupDirty = false;
@@ -1393,6 +1639,11 @@ async function returnToEntryMenu() {
 }
 
 async function openEntryGroup(groupKey) {
+  if (isSmartphoneDevice() && MOBILE_EXAM_GROUPS[groupKey]) {
+    activeMobileGroup = groupKey;
+    await switchView("mobile");
+    return;
+  }
   const section = form.querySelector(`.section-block[data-group="${cssEscape(groupKey)}"]`);
   if (!section) return;
   activeEntryGroup = groupKey;
@@ -2755,6 +3006,13 @@ function resetQuestionnaireForm() {
 }
 
 async function confirmSaveBeforeLeaving() {
+  if (document.body.dataset.view === "mobile" && mobileDirtyGroups.size) {
+    const discard = window.confirm("スマホ入力に未確定の検査値があります。\n入力を破棄して移動しますか？");
+    if (!discard) return false;
+    mobileDirtyGroups.clear();
+    hydrateMobileExamFields();
+    return true;
+  }
   if (!isDirty || !hasCurrentInput()) return true;
   const shouldSave = window.confirm("未保存の入力があります。移動する前に保存しますか？\n\nOK: 保存\nキャンセル: 保存せずに移動");
   if (!shouldSave) {
@@ -3871,9 +4129,25 @@ function toast(message, isError = false) {
   syncMessage.textContent = message;
   syncMessage.style.background = isError ? "var(--bad)" : "var(--soft)";
   if (!appToast) return;
+  const actionControl = document.activeElement?.closest?.("button, input, select, textarea");
   appToast.textContent = message;
   appToast.classList.toggle("error", isError);
   appToast.classList.add("visible");
+  if (window.matchMedia("(max-width: 640px)").matches) {
+    requestAnimationFrame(() => {
+      const toastRect = appToast.getBoundingClientRect();
+      document.body.style.setProperty("--toast-reserved-space", `${Math.ceil(toastRect.height + 32)}px`);
+      document.body.classList.add("toast-visible");
+      if (!actionControl) return;
+      const controlRect = actionControl.getBoundingClientRect();
+      const overlap = controlRect.bottom + 12 - toastRect.top;
+      if (overlap > 0) window.scrollBy({ top: overlap, behavior: "smooth" });
+    });
+  }
   window.clearTimeout(toast.hideTimer);
-  toast.hideTimer = window.setTimeout(() => appToast.classList.remove("visible"), isError ? 7000 : 4000);
+  toast.hideTimer = window.setTimeout(() => {
+    appToast.classList.remove("visible");
+    document.body.classList.remove("toast-visible");
+    document.body.style.removeProperty("--toast-reserved-space");
+  }, isError ? 7000 : 4000);
 }

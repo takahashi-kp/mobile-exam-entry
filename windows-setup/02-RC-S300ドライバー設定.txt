@@ -1,0 +1,22 @@
+RC-S300（PaSoRi）ドライバー設定
+================================
+
+この作業だけはWindowsの管理者権限が必要です。
+
+1. PaSoRi RC-S300をUSBポートへ接続します。
+2. 同梱の「zadig-2.9.exe」を右クリックし、「管理者として実行」を選びます。
+3. Zadigの「Options」メニューで「List All Devices」をオンにします。
+4. Vendor ID 054C、Product ID 0DC8のPaSoRiを選びます。
+5. interface 0を選び、右側のドライバーを「WinUSB」にして「Install Driver」を実行します。
+6. interface 1についても、同じように「WinUSB」を設定します。
+7. PaSoRiを一度抜き、同じUSBポートへ接続し直します。
+8. 「03-接続確認.bat」を実行します。
+
+重要
+----
+- 「Downgrade WCID Driver」は使用しません。
+- PaSoRi以外のUSB機器のドライバーを変更しないでください。
+- 対象は Sony/FeliCa/PaSoRi、VID 054C、PID 0DC8だけです。
+- interface 0とinterface 1の両方をWinUSBにします。
+- Windows Update後に読めなくなった場合は、この手順を再度確認します。
+

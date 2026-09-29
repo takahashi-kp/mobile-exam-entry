@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#176c6a">
   <title>出張健診 検査項目入力</title>
   <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="stylesheet" href="./styles.css?v=20260928-04">
+  <link rel="stylesheet" href="./styles.css?v=20260929-11">
 </head>
 <body>
   <div class="app-toast" id="appToast" role="status" aria-live="polite"></div>
@@ -419,6 +419,65 @@
         </form>
       </section>
 
+      <section class="view mobile-exam-view" id="mobileView">
+        <div class="mobile-exam-page-head">
+          <button class="ghost" id="backFromMobileExam" type="button">検査選択へ戻る</button>
+        </div>
+        <div class="mobile-patient-lookup" id="mobilePatientLookup">
+          <label for="mobilePatientCode">個人番号</label>
+          <div>
+            <input id="mobilePatientCode" inputmode="numeric" autocomplete="off" placeholder="個人番号を入力">
+            <button class="primary" id="loadMobilePatient" type="button">表示</button>
+          </div>
+          <p>個人番号を入力して受診者を表示してください。</p>
+        </div>
+
+        <div class="mobile-exam-workspace" id="mobileExamWorkspace" hidden>
+          <div class="mobile-patient-line" aria-label="受診者情報">
+            <span><small>個人番号</small><strong id="mobileIdentityCode"></strong></span>
+            <span><small>カナ氏名</small><strong id="mobileIdentityKana"></strong></span>
+            <span><small>氏名</small><strong id="mobileIdentityName"></strong></span>
+            <span><small>性別</small><strong id="mobileIdentitySex"></strong></span>
+            <span><small>生年月日</small><strong id="mobileIdentityBirth"></strong></span>
+            <button class="ghost mobile-change-patient" id="changeMobilePatient" type="button">受診者変更</button>
+          </div>
+
+          <form id="mobileExamForm" autocomplete="off">
+            <section class="mobile-exam-panel is-active" data-mobile-panel="視力">
+              <h2>視力</h2>
+              <div class="mobile-value-grid vision">
+                <label><span>右 裸眼</span><input data-mobile-field="視力右裸眼" inputmode="decimal" list="visionOptions"></label>
+                <label><span>右 矯正</span><input data-mobile-field="視力右矯正" inputmode="decimal" list="visionOptions"></label>
+                <label><span>左 裸眼</span><input data-mobile-field="視力左裸眼" inputmode="decimal" list="visionOptions"></label>
+                <label><span>左 矯正</span><input data-mobile-field="視力左矯正" inputmode="decimal" list="visionOptions"></label>
+              </div>
+            </section>
+
+            <section class="mobile-exam-panel" data-mobile-panel="血圧">
+              <h2>血圧</h2>
+              <div class="mobile-value-grid blood-pressure">
+                <label><span>1回目 最高</span><input data-mobile-field="1回目最高血圧" inputmode="numeric" maxlength="3"></label>
+                <label><span>1回目 最低</span><input data-mobile-field="1回目最低血圧" inputmode="numeric" maxlength="3"></label>
+                <label><span>2回目 最高</span><input data-mobile-field="2回目最高血圧" inputmode="numeric" maxlength="3"></label>
+                <label><span>2回目 最低</span><input data-mobile-field="2回目最低血圧" inputmode="numeric" maxlength="3"></label>
+              </div>
+            </section>
+
+            <section class="mobile-exam-panel" data-mobile-panel="身体">
+              <h2>身体計測</h2>
+              <div class="mobile-value-grid body-measurements">
+                <label><span>身長 <small>cm</small></span><input data-mobile-field="身長" inputmode="decimal"></label>
+                <label><span>体重 <small>kg</small></span><input data-mobile-field="体重" inputmode="decimal"></label>
+                <label><span>腹囲 <small>cm</small></span><input data-mobile-field="腹囲" inputmode="decimal"></label>
+                <div class="mobile-bmi"><span>BMI</span><output id="mobileBmi">--</output></div>
+              </div>
+            </section>
+          </form>
+
+          <button class="mobile-confirm-button" id="confirmMobileExam" type="button">確認して確定</button>
+        </div>
+      </section>
+
       <section class="view" id="receptionView">
         <div class="reception-layout">
           <section class="reception-workflow">
@@ -675,6 +734,6 @@
     </section>
   </main>
 
-  <script src="./app.js?v=20260928-11" type="module"></script>
+  <script src="./app.js?v=20260929-08" type="module"></script>
 </body>
 </html>

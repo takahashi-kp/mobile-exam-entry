@@ -34,6 +34,14 @@ python -m http.server 4173
 
 有償SDKは使用せず、同梱のUSB読み取りプログラムでカードのIDm、PMm、FeliCa Lite-Sのユーザーブロックを読み取ります。RC-S300の両インターフェースには、事前にZadigでWinUSBドライバーを設定します。
 
+新しいWindows 11端末向けの配布ZIPは、リポジトリ直下で次を実行して作成します。
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\build-windows11-package.ps1
+```
+
+作成された `dist\mobile-exam-entry-windows11-felica-*.zip` を新端末へ渡し、ZIP内の `README-最初にお読みください.txt` に従ってセットアップします。新端末に有償SDKやRust開発環境は不要です。
+
 1. PaSoRiを接続し、`start-felica-helper.bat` をダブルクリックします。
 2. 「受付」画面で受診票の個人番号を読み取り、本人情報を確認します。
 3. 「本人確認済み・カードを置く」を押してFeliCa Lite-Sを置き、受付を完了します。
