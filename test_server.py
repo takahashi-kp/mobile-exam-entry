@@ -18,11 +18,12 @@ class MergePayloadTests(unittest.TestCase):
         guidance = client.get("/guidance.js")
 
         self.assertEqual(index.status_code, 200)
-        self.assertIn(b"app.js?v=20260929-08", index.data)
+        self.assertIn(b"app.js?v=20260929-09", index.data)
         self.assertIn(b'id="appToast"', index.data)
         self.assertIn(b'id="mobileView"', index.data)
         self.assertIn(b'id="mobileExamForm"', index.data)
         self.assertIn(b'id="confirmMobileExam"', index.data)
+        self.assertIn(b'id="mobileCompactPanel"', index.data)
         self.assertIn(b'id="downloadScheduleFormat"', index.data)
         self.assertIn(b'id="showArchivedSchedules"', index.data)
         self.assertIn(b'id="editPatientIdentity"', index.data)

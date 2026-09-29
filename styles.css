@@ -485,6 +485,56 @@ body[data-view="mobile"] .workspace {
   outline: 0;
 }
 
+.mobile-compact-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.mobile-compact-grid label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.mobile-compact-grid label > span {
+  color: #263d3a;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.mobile-compact-grid input,
+.mobile-compact-grid select,
+.mobile-compact-grid textarea {
+  background: #fff;
+  border: 2px solid #697d78;
+  border-radius: 7px;
+  color: #102523;
+  font-size: 18px;
+  font-weight: 700;
+  min-height: 50px;
+  min-width: 0;
+  padding: 8px 10px;
+  width: 100%;
+}
+
+.mobile-compact-grid textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.mobile-compact-grid .mobile-compact-wide {
+  grid-column: 1 / -1;
+}
+
+.mobile-compact-grid input:focus,
+.mobile-compact-grid select:focus,
+.mobile-compact-grid textarea:focus {
+  border-color: #176c6a;
+  box-shadow: 0 0 0 3px rgba(23, 108, 106, .18);
+  outline: 0;
+}
+
 .mobile-bmi output {
   align-items: center;
   background: #edf2f0;
@@ -2085,6 +2135,10 @@ button:disabled {
 
   .mobile-value-grid {
     gap: 8px;
+  }
+
+  .mobile-compact-grid {
+    grid-template-columns: 1fr;
   }
 
   .mobile-value-grid input,

@@ -208,8 +208,16 @@ const PROGRESS_GROUPS = [
   { label: "診察", target: "診察", fields: ["巡回診察", "結膜貧血", "甲状腺腫大", "心雑音", "脈の異常", "呼吸音異常", "その他", "その他_自由入力", "巡回診察_自由入力"] }
 ];
 const MOBILE_EXAM_GROUPS = {
+  "便区分": {
+    label: "便区分", compact: true,
+    fields: [
+      { key: "便区分", label: "便区分", type: "select", options: ["1回", "2回"] },
+      { key: "便区分_自由入力", label: "備考", maxlength: 15 }
+    ]
+  },
   "視力": {
     label: "視力",
+    patientReview: true,
     fields: [
       { key: "視力右裸眼", label: "右 裸眼" },
       { key: "視力右矯正", label: "右 矯正" },
@@ -219,6 +227,7 @@ const MOBILE_EXAM_GROUPS = {
   },
   "血圧": {
     label: "血圧",
+    patientReview: true,
     fields: [
       { key: "1回目最高血圧", label: "1回目 最高", unit: "mmHg" },
       { key: "1回目最低血圧", label: "1回目 最低", unit: "mmHg" },
@@ -228,11 +237,68 @@ const MOBILE_EXAM_GROUPS = {
   },
   "身体": {
     label: "身体計測",
+    patientReview: true,
     fields: [
       { key: "身長", label: "身長", unit: "cm" },
       { key: "体重", label: "体重", unit: "kg" },
       { key: "腹囲", label: "腹囲", unit: "cm" }
     ]
+  },
+  "X線": {
+    label: "X線", compact: true,
+    fields: [
+      { key: "胸部X線フィルム番号", label: "胸部X線フィルム番号", inputMode: "numeric", maxlength: 5 },
+      { key: "塵肺", label: "塵肺", type: "select", options: ["該当"] },
+      { key: "アスベスト", label: "アスベスト", type: "select", options: ["該当"] },
+      { key: "胸部X線_自由入力", label: "胸部X線備考", maxlength: 15 },
+      { key: "胃部X線フィルム番号", label: "胃部X線フィルム番号", inputMode: "numeric", maxlength: 5 },
+      { key: "胃部X線_自由入力", label: "胃部X線備考", maxlength: 15 }
+    ]
+  },
+  "食後": {
+    label: "食後時間", compact: true,
+    fields: [
+      { key: "空腹時間（時）", label: "空腹時間（時）", placeholder: "数値または空腹" },
+      { key: "空腹時間（分）", label: "空腹時間（分）", inputMode: "numeric", maxlength: 2 },
+      { key: "食後時間_自由入力", label: "備考", maxlength: 15 }
+    ]
+  },
+  "尿": {
+    label: "尿検査", compact: true,
+    fields: [
+      ...URINE_TESTS.map(({ name, options }) => ({ key: name, label: name, type: "select", options })),
+      { key: "尿PH", label: "尿PH", maxlength: 1 },
+      { key: "尿検査_自由入力", label: "備考", maxlength: 15 }
+    ]
+  },
+  "脈": {
+    label: "脈", compact: true,
+    fields: [
+      { key: "脈拍", label: "脈拍", inputMode: "numeric", maxlength: 3 },
+      { key: "脈_自由入力", label: "備考", maxlength: 15 }
+    ]
+  },
+  "聴力": {
+    label: "聴力", compact: true,
+    fields: [
+      { key: "聴力(右)1000Hz", label: "右 1000Hz", type: "select", options: ["所見なし", "所見あり"] },
+      { key: "聴力(左)1000Hz", label: "左 1000Hz", type: "select", options: ["所見なし", "所見あり"] },
+      { key: "聴力(右)4000Hz", label: "右 4000Hz", type: "select", options: ["所見なし", "所見あり"] },
+      { key: "聴力(左)4000Hz", label: "左 4000Hz", type: "select", options: ["所見なし", "所見あり"] },
+      { key: "聴力_自由入力", label: "備考", maxlength: 15 }
+    ]
+  },
+  "保健指導": {
+    label: "保健指導判定", compact: true,
+    fields: [
+      { key: "保健指導_保険", label: "保険", type: "select", options: ["はい", "いいえ"] },
+      { key: "保健指導_HbA1c", label: "HbA1c有無", type: "select", options: ["あり", "なし"] },
+      { key: "保健指導_内服", label: "内服", type: "select", options: ["なし", "あり"] }
+    ]
+  },
+  "メモ": {
+    label: "メモ", compact: true,
+    fields: [{ key: "メモ", label: "メモ", type: "textarea", rows: 5 }]
   }
 };
 
@@ -1513,7 +1579,7 @@ function hydrateMobilePatientLine() {
 
 function hydrateMobileExamFields() {
   mobileExamForm?.querySelectorAll("[data-mobile-field]").forEach((input) => {
-    input.value = form.elements.namedItem(input.dataset.mobileField)?.value || "";
+    input.value = getEntryFormFieldValue(input.dataset.mobileField);
   });
   updateMobileBmi();
   renderMobileResultValues();
@@ -1522,12 +1588,14 @@ function hydrateMobileExamFields() {
 async function selectMobileExamGroup(groupKey) {
   if (!MOBILE_EXAM_GROUPS[groupKey]) return;
   activeMobileGroup = groupKey;
+  renderMobileCompactPanel(groupKey);
   document.querySelectorAll("[data-mobile-group]").forEach((button) => {
     button.classList.toggle("is-active", button.dataset.mobileGroup === groupKey);
   });
   document.querySelectorAll("[data-mobile-panel]").forEach((panel) => {
     panel.classList.toggle("is-active", panel.dataset.mobilePanel === groupKey);
   });
+  hydrateMobileExamFields();
   renderMobileResultValues();
   await updateMobileExamStatus();
 }
@@ -1535,14 +1603,66 @@ async function selectMobileExamGroup(groupKey) {
 function handleMobileExamInput(event) {
   const input = event.target.closest?.("[data-mobile-field]");
   if (!input) return;
-  sanitizeMobileNumericInput(input);
+  if (input.matches('input[inputmode="numeric"], input[inputmode="decimal"]')) sanitizeMobileNumericInput(input);
   const group = Object.entries(MOBILE_EXAM_GROUPS)
     .find(([, definition]) => definition.fields.some((field) => field.key === input.dataset.mobileField))?.[0];
   if (group) mobileDirtyGroups.add(group);
   updateMobileBmi();
   renderMobileResultValues();
   const confirmButton = document.querySelector("#confirmMobileExam");
-  if (confirmButton) confirmButton.textContent = "確認して確定";
+  if (confirmButton) {
+    confirmButton.textContent = MOBILE_EXAM_GROUPS[activeMobileGroup]?.patientReview ? "確認して確定" : "登録";
+  }
+}
+
+function getEntryFormFieldValue(fieldName) {
+  const fields = Array.from(form.elements).filter((field) => field.name === fieldName);
+  const choices = fields.filter((field) => field.type === "checkbox" || field.type === "radio");
+  if (choices.length) return choices.find((field) => field.checked)?.value || "";
+  return String(fields[0]?.value || "");
+}
+
+function setEntryFormFieldValue(fieldName, value) {
+  Array.from(form.elements).filter((field) => field.name === fieldName).forEach((field) => {
+    if (field.type === "checkbox" || field.type === "radio") {
+      field.checked = Boolean(value) && field.value === value;
+    } else {
+      field.value = value;
+    }
+  });
+}
+
+function renderMobileCompactPanel(groupKey) {
+  const panel = document.querySelector("#mobileCompactPanel");
+  const definition = MOBILE_EXAM_GROUPS[groupKey];
+  if (!panel || !definition?.compact) return;
+  panel.dataset.mobilePanel = groupKey;
+  panel.innerHTML = `<h2>${escapeHtml(definition.label)}</h2><div class="mobile-compact-grid"></div>`;
+  const grid = panel.querySelector(".mobile-compact-grid");
+  definition.fields.forEach((field) => {
+    const label = document.createElement("label");
+    if (field.type === "textarea") label.classList.add("mobile-compact-wide");
+    const title = document.createElement("span");
+    title.textContent = field.label;
+    label.appendChild(title);
+    let control;
+    if (field.type === "select") {
+      control = document.createElement("select");
+      control.appendChild(new Option("未選択", ""));
+      (field.options || []).forEach((option) => control.appendChild(new Option(option, option)));
+    } else if (field.type === "textarea") {
+      control = document.createElement("textarea");
+      control.rows = field.rows || 4;
+    } else {
+      control = document.createElement("input");
+      if (field.inputMode) control.inputMode = field.inputMode;
+      if (field.maxlength) control.maxLength = field.maxlength;
+      if (field.placeholder) control.placeholder = field.placeholder;
+    }
+    control.dataset.mobileField = field.key;
+    label.appendChild(control);
+    grid.appendChild(label);
+  });
 }
 
 function sanitizeMobileNumericInput(input) {
@@ -1582,7 +1702,10 @@ async function updateMobileExamStatus() {
   const item = await getCurrentGroupValue(activeMobileGroup);
   const confirmed = groupVerificationState(item) === "confirmed" && !mobileDirtyGroups.has(activeMobileGroup);
   const confirmButton = document.querySelector("#confirmMobileExam");
-  if (confirmButton) confirmButton.textContent = confirmed ? "確定済み" : "確認して確定";
+  if (confirmButton) {
+    const actionLabel = MOBILE_EXAM_GROUPS[activeMobileGroup]?.patientReview ? "確認して確定" : "登録";
+    confirmButton.textContent = confirmed ? "登録済み" : actionLabel;
+  }
 }
 
 async function confirmMobileExam() {
@@ -1599,10 +1722,10 @@ async function confirmMobileExam() {
   }
   setProgrammaticFormChange(() => {
     Object.entries(values).forEach(([fieldName, value]) => {
-      const field = form.elements.namedItem(fieldName);
-      if (field) field.value = value;
+      setEntryFormFieldValue(fieldName, value);
     });
   });
+  if (activeMobileGroup === "保健指導") updateEntryGuidanceSelection();
   const saved = await saveRecordData(formToRecord(), {
     silent: true,
     groupTarget: activeMobileGroup,
@@ -1611,7 +1734,7 @@ async function confirmMobileExam() {
   if (!saved) return;
   mobileDirtyGroups.delete(activeMobileGroup);
   await updateMobileExamStatus();
-  toast(`${definition.label}を確認済みにしました。`);
+  toast(definition.patientReview ? `${definition.label}を確認済みにしました。` : `${definition.label}を登録しました。`);
 }
 
 function showEntryMenu() {
