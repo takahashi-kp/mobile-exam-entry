@@ -16,6 +16,7 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.webkit.WebResourceRequest;
+import android.window.OnBackInvokedDispatcher;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -73,6 +74,12 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
             requestPermissions(new String[]{Manifest.permission.CAMERA}, 10);
         }
         nfcAdapter = NfcAdapter.getDefaultAdapter(this);
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+                OnBackInvokedDispatcher.PRIORITY_DEFAULT,
+                this::handleBackNavigation
+            );
+        }
         webView.loadUrl(APP_URL);
     }
 
@@ -242,7 +249,15 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
     private static String hex(byte[] bytes) { StringBuilder out = new StringBuilder(); for (byte value : bytes) out.append(String.format(Locale.ROOT, "%02X", value)); return out.toString(); }
     private static byte[] fromHex(String value) throws Exception { if ((value.length() & 1) != 0) throw new Exception("16進データが不正です。"); byte[] out = new byte[value.length() / 2]; for (int i = 0; i < out.length; i++) out[i] = (byte) Integer.parseInt(value.substring(i * 2, i * 2 + 2), 16); return out; }
 
+    private void handleBackNavigation() {
+        String script = "(() => { const event = new CustomEvent('android-back-request', {cancelable:true}); window.dispatchEvent(event); return event.defaultPrevented; })()";
+        webView.evaluateJavascript(script, handled -> {
+            if ("true".equals(handled)) return;
+            if (webView.canGoBack()) webView.goBack(); else finish();
+        });
+    }
+
     @Override public void onBackPressed() {
-        if (webView.canGoBack()) webView.goBack(); else super.onBackPressed();
+        handleBackNavigation();
     }
 }

@@ -365,11 +365,13 @@ body[data-view="mobile"] .workspace {
 .mobile-exam-page-head {
   margin: 0 auto 8px;
   max-width: 900px;
+  padding-top: max(14px, env(safe-area-inset-top));
 }
 
 .mobile-exam-page-head button {
-  min-height: 38px;
+  min-height: 48px;
   min-width: 136px;
+  padding: 9px 14px;
   width: auto;
 }
 

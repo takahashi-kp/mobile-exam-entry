@@ -701,6 +701,7 @@ function bindUi() {
   identityEditButton?.addEventListener("click", () => setPatientIdentityEditable(true));
   felicaReadCardButton?.addEventListener("click", readFelicaCardAndOpenPatient);
   window.addEventListener("android-felica-tag", handleAndroidFelicaTag);
+  window.addEventListener("android-back-request", handleAndroidBackRequest);
   document.querySelector("#lookupReceptionPatient")?.addEventListener("click", lookupReceptionPatient);
   receptionPatientCode?.addEventListener("keydown", (event) => {
     if (event.key !== "Enter") return;
@@ -808,6 +809,19 @@ function handleAndroidFelicaTag() {
     window.setTimeout(() => readFelicaCardAndLoadMobilePatient(), 80);
   } else if (view === "reception") {
     window.setTimeout(() => handleReceptionFelicaTag(), 80);
+  }
+}
+
+function handleAndroidBackRequest(event) {
+  const view = document.body.dataset.view;
+  if (view === "mobile") {
+    event.preventDefault();
+    returnFromMobileExam();
+    return;
+  }
+  if (view === "entry" && activeEntryGroup) {
+    event.preventDefault();
+    returnToEntryMenu();
   }
 }
 
