@@ -700,6 +700,7 @@ function bindUi() {
   document.querySelector("#saveRecord").addEventListener("click", saveCurrentRecord);
   identityEditButton?.addEventListener("click", () => setPatientIdentityEditable(true));
   felicaReadCardButton?.addEventListener("click", readFelicaCardAndOpenPatient);
+  window.addEventListener("android-felica-tag", handleAndroidFelicaTag);
   document.querySelector("#lookupReceptionPatient")?.addEventListener("click", lookupReceptionPatient);
   receptionPatientCode?.addEventListener("keydown", (event) => {
     if (event.key !== "Enter") return;
@@ -796,6 +797,16 @@ function bindUi() {
   ["氏名", "カナ氏名", "性別名称", "生年月日"].forEach((name) => {
     form.elements.namedItem(name)?.addEventListener("input", updatePatientSummary);
   });
+}
+
+function handleAndroidFelicaTag() {
+  if (document.hidden || felicaBusy) return;
+  const view = document.body.dataset.view;
+  if (view === "entry") {
+    window.setTimeout(() => readFelicaCardAndOpenPatient(), 80);
+  } else if (view === "mobile") {
+    window.setTimeout(() => readFelicaCardAndLoadMobilePatient(), 80);
+  }
 }
 
 async function felicaRequest(path, body) {
@@ -914,6 +925,37 @@ async function readFelicaCardAndOpenPatient() {
     toast(`カードを読み取れません。カードを置き直してください。${error.message ? ` (${error.message})` : ""}`, true);
   } finally {
     felicaReadCardButton.disabled = false;
+    felicaBusy = false;
+  }
+}
+
+async function readFelicaCardAndLoadMobilePatient() {
+  if (felicaBusy) return;
+  felicaBusy = true;
+  try {
+    const card = await readFelicaCard();
+    const result = await lookupFelicaBinding(card);
+    const binding = result.binding;
+    if (!binding) {
+      toast("未登録のカードです。受付画面で受診者を登録してください。", true);
+      return;
+    }
+    if (String(binding.groupId) !== String(activeGroup?.id || "")) {
+      toast("現在とは別の予定グループに登録されたカードです。", true);
+      return;
+    }
+    boothCardPresent = true;
+    boothCardIdm = card.idm;
+    boothCardPatientCode = String(binding.patientCode || "");
+    boothCardGroupId = String(binding.groupId || "");
+    if (mobilePatientCode) mobilePatientCode.value = boothCardPatientCode;
+    await loadMobilePatient();
+    setFelicaStatus(`カード ${card.idm.slice(-4)} 受診者表示中`, "ready");
+    toast(`個人番号 ${boothCardPatientCode} を表示しました`);
+  } catch (error) {
+    setFelicaStatus("カード読取エラー", "error");
+    toast(`カードを読み取れません。カードを当て直してください。${error.message ? ` (${error.message})` : ""}`, true);
+  } finally {
     felicaBusy = false;
   }
 }
