@@ -106,7 +106,6 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
 
     @Override public void onTagDiscovered(Tag tag) {
         currentTag = tag;
-        playCardFeedback();
         String idm = hex(tag.getId());
         String script = "window.dispatchEvent(new CustomEvent('android-felica-tag',{detail:{idm:'" + idm + "'}}));";
         runOnUiThread(() -> webView.evaluateJavascript(script, null));
@@ -127,6 +126,7 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
                     case "/binding/save": return saveBinding(body).toString();
                     case "/feedback/get": return ok().put("mode", feedbackMode()).toString();
                     case "/feedback/set": return saveFeedbackMode(body.optString("mode")).toString();
+                    case "/feedback/play": playCardFeedback(body.optString("outcome")); return ok().toString();
                     default: throw new Exception("未対応のFeliCa操作です: " + path);
                 }
             } catch (Exception error) { return failure(error).toString(); }
@@ -147,19 +147,27 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
         return ok().put("mode", mode);
     }
 
-    private void playCardFeedback() {
+    private void playCardFeedback(String outcome) {
         String mode = feedbackMode();
         if ("silent".equals(mode)) return;
         Vibrator vibrator = getSystemService(Vibrator.class);
         if (vibrator != null && vibrator.hasVibrator()) {
-            vibrator.vibrate(VibrationEffect.createOneShot(45, VibrationEffect.DEFAULT_AMPLITUDE));
+            if ("success".equals(outcome)) {
+                vibrator.vibrate(VibrationEffect.createOneShot(45, VibrationEffect.DEFAULT_AMPLITUDE));
+            } else if ("warning".equals(outcome)) {
+                vibrator.vibrate(VibrationEffect.createWaveform(new long[]{0, 70, 60, 70}, -1));
+            } else {
+                vibrator.vibrate(VibrationEffect.createOneShot(220, VibrationEffect.DEFAULT_AMPLITUDE));
+            }
         }
         if ("vibration".equals(mode)) return;
         int volume = "small".equals(mode) ? 25 : "large".equals(mode) ? 100 : 60;
         try {
             ToneGenerator tone = new ToneGenerator(AudioManager.STREAM_NOTIFICATION, volume);
-            tone.startTone(ToneGenerator.TONE_PROP_BEEP, 80);
-            new Handler(Looper.getMainLooper()).postDelayed(tone::release, 180);
+            int toneType = "success".equals(outcome) ? ToneGenerator.TONE_PROP_ACK : ToneGenerator.TONE_PROP_NACK;
+            int duration = "success".equals(outcome) ? 80 : "warning".equals(outcome) ? 150 : 240;
+            tone.startTone(toneType, duration);
+            new Handler(Looper.getMainLooper()).postDelayed(tone::release, duration + 120L);
         } catch (RuntimeException ignored) {
             // Vibration still confirms the read when audio output is unavailable.
         }

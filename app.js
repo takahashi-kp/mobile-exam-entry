@@ -858,6 +858,15 @@ async function felicaRequest(path, body) {
   return result;
 }
 
+async function playFelicaFeedback(outcome) {
+  if (!window.AndroidFelica?.request) return;
+  try {
+    await felicaRequest("/feedback/play", { outcome });
+  } catch {
+    // Screen feedback remains available when audio or vibration cannot be played.
+  }
+}
+
 function setFelicaStatus(message, state = "") {
   if (!felicaStatus) return;
   felicaStatus.textContent = message;
@@ -913,17 +922,20 @@ async function readFelicaCardAndOpenPatient() {
     const card = await readFelicaCard();
     const result = await lookupFelicaBinding(card);
     if (!result.binding) {
+      await playFelicaFeedback("warning");
       toast("未登録のカードです。受付画面で受診者を登録してください。", true);
       return;
     }
     const currentGroupId = String(activeGroup?.id || "");
     if (currentGroupId && String(result.binding.groupId) !== currentGroupId) {
+      await playFelicaFeedback("error");
       toast("このカードは現在とは別の予定グループに登録されています。", true);
       return;
     }
     const patientCode = String(result.binding.patientCode || "");
     const currentCode = String(form.elements.namedItem("個人番号")?.value || "").trim();
     if (activeEntryGroup && entryGroupDirty && currentCode !== patientCode) {
+      await playFelicaFeedback("warning");
       toast("前の受診者に未登録の入力があります。登録または取消後にカードを読み直してください。", true);
       return;
     }
@@ -935,8 +947,10 @@ async function readFelicaCardAndOpenPatient() {
     if (document.body.dataset.view !== "entry") await switchView("entry");
     await updateEntryVerificationUi();
     if (activeEntryGroup === "採血") requestAnimationFrame(() => bloodTubeBarcode?.focus());
+    await playFelicaFeedback("success");
     toast("FeliCaで受診者を確認しました");
   } catch (error) {
+    await playFelicaFeedback("error");
     setFelicaStatus("カード読取エラー", "error");
     toast(`カードを読み取れません。カードを置き直してください。${error.message ? ` (${error.message})` : ""}`, true);
   } finally {
@@ -953,10 +967,12 @@ async function readFelicaCardAndLoadMobilePatient() {
     const result = await lookupFelicaBinding(card);
     const binding = result.binding;
     if (!binding) {
+      await playFelicaFeedback("warning");
       toast("未登録のカードです。受付画面で受診者を登録してください。", true);
       return;
     }
     if (String(binding.groupId) !== String(activeGroup?.id || "")) {
+      await playFelicaFeedback("error");
       toast("現在とは別の予定グループに登録されたカードです。", true);
       return;
     }
@@ -967,8 +983,10 @@ async function readFelicaCardAndLoadMobilePatient() {
     if (mobilePatientCode) mobilePatientCode.value = boothCardPatientCode;
     await loadMobilePatient();
     setFelicaStatus(`カード ${card.idm.slice(-4)} 受診者表示中`, "ready");
+    await playFelicaFeedback("success");
     toast(`個人番号 ${boothCardPatientCode} を表示しました`);
   } catch (error) {
+    await playFelicaFeedback("error");
     setFelicaStatus("カード読取エラー", "error");
     toast(`カードを読み取れません。カードを当て直してください。${error.message ? ` (${error.message})` : ""}`, true);
   } finally {
@@ -1002,6 +1020,7 @@ async function pollFelicaForActiveBooth() {
       boothCardGroupId = "";
       setFelicaStatus(`カード ${card.idm.slice(-4)} 未登録`, "error");
       toast("受付登録されていないカードです。受付画面で登録してください。", true);
+      await playFelicaFeedback("warning");
       await updateEntryVerificationUi();
       return;
     }
@@ -1010,6 +1029,7 @@ async function pollFelicaForActiveBooth() {
       boothCardGroupId = "";
       setFelicaStatus(`カード ${card.idm.slice(-4)} 別グループ`, "error");
       toast("現在とは別の予定グループに登録されたカードです。", true);
+      await playFelicaFeedback("error");
       await updateEntryVerificationUi();
       return;
     }
@@ -1020,11 +1040,13 @@ async function pollFelicaForActiveBooth() {
       if (entryGroupDirty) {
         setFelicaStatus("未登録入力あり", "error");
         toast("前の受診者に未登録の入力があります。登録または取消後にカードを置き直してください。", true);
+        await playFelicaFeedback("warning");
         return;
       }
       await loadEntryForPersonalNumber(boothCardPatientCode);
     }
     setFelicaStatus(`カード ${card.idm.slice(-4)} 受診者表示中`, "ready");
+    await playFelicaFeedback("success");
     toast(`個人番号 ${boothCardPatientCode} を表示しました`);
     await updateEntryVerificationUi();
     if (activeEntryGroup === "採血") requestAnimationFrame(() => bloodTubeBarcode?.focus());
@@ -1100,16 +1122,20 @@ async function handleReceptionFelicaTag() {
     const binding = result.binding;
     if (!binding) {
       setReceptionState("warning", "未登録のカードです", "受診票の個人番号を読み取るか、手入力して受診者を選択してください。" );
+      await playFelicaFeedback("warning");
       return;
     }
     if (String(binding.groupId) !== String(activeGroup?.id || "")) {
       setReceptionState("error", "別の予定グループのカードです", "現在の予定グループを確認してください。" );
+      await playFelicaFeedback("error");
       return;
     }
     if (receptionPatientCode) receptionPatientCode.value = String(binding.patientCode || "");
     await lookupReceptionPatient();
     setFelicaStatus(`カード ${card.idm.slice(-4)} 受付済`, "ready");
+    await playFelicaFeedback("success");
   } catch (error) {
+    await playFelicaFeedback("error");
     setReceptionState("error", "カードを読み取れませんでした", error.message || "カードを当て直してください。" );
   }
 }
@@ -1166,6 +1192,7 @@ async function initializeReceptionCard(card) {
       const confirmed = window.confirm(`このカードは個人番号 ${previous.patientCode} に登録されています。\n内容を消去して現在の受診者へ再登録しますか？`);
       if (!confirmed) {
         setReceptionState("warning", "カードの再登録を中止しました", "別のカードを置くか、カードなしで受付してください。" );
+        await playFelicaFeedback("warning");
         return;
       }
     }
@@ -1192,8 +1219,10 @@ async function initializeReceptionCard(card) {
     await saveReception("felica", card.idm);
     setFelicaStatus(`カード ${card.idm.slice(-4)} 登録済`, "ready");
     setReceptionState("complete", "受付完了・カードを渡してください", `カード末尾 ${card.idm.slice(-4)}　書込みと再読取り検証が完了しました。` );
+    await playFelicaFeedback("success");
     finishReceptionAfterDelay();
   } catch (error) {
+    await playFelicaFeedback("error");
     setReceptionState("error", "カード受付に失敗しました", `${error.message || "カードを置き直してください。"} 端末には受付完了として記録していません。` );
   } finally {
     felicaBusy = false;
@@ -1311,6 +1340,7 @@ async function recoverFromFelicaCard() {
     const versionKey = `${cardIdm}:${slot.sequence}`;
     if (recoveredCardVersions.has(versionKey)) {
       setRecoveryState("warning", "このカードは読取済みです", `カード末尾 ${cardIdm.slice(-4)} / 世代 ${slot.sequence}` );
+      await playFelicaFeedback("warning");
       return;
     }
     const decoded = decodeFelicaExamPayload(slot.payload);
@@ -1385,7 +1415,9 @@ async function recoverFromFelicaCard() {
     renderRecoveryRows();
     await refreshRows();
     setRecoveryState("complete", "復元しました", `${patientCode} ${patientData["氏名"] || ""} / ${decoded.groupValues.length}検査グループ` );
+    await playFelicaFeedback("success");
   } catch (error) {
+    await playFelicaFeedback("error");
     recoveryResults.unshift({ time: new Date().toISOString(), patientCode: "", name: "", groups: 0, card: cardIdm.slice(-4), result: error.message || "復元失敗", error: true });
     renderRecoveryRows();
     setRecoveryState("error", "復元できませんでした", error.message || "カードを置き直してください。" );
@@ -1464,10 +1496,12 @@ async function writeConfirmedExamSnapshotToFelica(groupKey) {
 
 function showFelicaSaveResult(result, successMessage) {
   if (result.written) {
+    playFelicaFeedback("success");
     toast(`${successMessage} FeliCaにも保存しました（${result.payloadBytes}バイト）。`);
   } else if (result.reason === "helper-unavailable") {
     toast(`${successMessage} FeliCa補助アプリが未起動のため、カードには未反映です。`);
   } else {
+    playFelicaFeedback("error");
     const detail = result.error?.message ? ` ${result.error.message}` : "";
     toast(`${successMessage} 端末には保存済みですが、FeliCaには反映できませんでした。${detail}`, true);
   }
