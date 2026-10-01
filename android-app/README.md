@@ -13,7 +13,7 @@
 ## 他端末へのテスト配布
 
 `gradlew.bat assembleDebug` で生成した `app/build/outputs/apk/debug/app-debug.apk` を、Web配信用の
-`downloads/mobile-exam-entry-android-v0.1.1.apk` として配置します。端末では
+`downloads/mobile-exam-entry-android-v0.1.2.apk` として配置します。端末では
 `/android-download.html` を開き、APKをダウンロードしてインストールします。
 
 このAPKは社内テスト用です。正式運用版は専用のリリース署名鍵を作成し、鍵を安全な場所へ
