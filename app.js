@@ -3829,6 +3829,9 @@ function scrollToGroup(targetGroup) {
 async function saveSettings() {
   await put(SETTINGS, { key: "cloudUrl", value: document.querySelector("#cloudUrl").value.trim() });
   await put(SETTINGS, { key: "cloudKey", value: document.querySelector("#cloudKey").value.trim() });
+  if (window.AndroidFelica?.request) {
+    await felicaRequest("/feedback/set", { mode: document.querySelector("#cardFeedbackMode").value });
+  }
   toast("同期設定を保存しました");
   if (navigator.onLine) await syncPending();
 }
@@ -3836,6 +3839,18 @@ async function saveSettings() {
 async function loadSettings() {
   document.querySelector("#cloudUrl").value = (await getOne(SETTINGS, "cloudUrl"))?.value || DEFAULT_CLOUD_URL;
   document.querySelector("#cloudKey").value = (await getOne(SETTINGS, "cloudKey"))?.value || "";
+  const feedbackSetting = document.querySelector("#cardFeedbackSetting");
+  if (window.AndroidFelica?.request) {
+    feedbackSetting.hidden = false;
+    try {
+      const result = await felicaRequest("/feedback/get");
+      document.querySelector("#cardFeedbackMode").value = result.mode || "normal";
+    } catch {
+      document.querySelector("#cardFeedbackMode").value = "normal";
+    }
+  } else {
+    feedbackSetting.hidden = true;
+  }
 }
 
 async function syncPending() {

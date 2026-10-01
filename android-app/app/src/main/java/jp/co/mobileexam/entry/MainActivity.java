@@ -5,10 +5,16 @@ import android.app.Activity;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.net.Uri;
+import android.media.AudioManager;
+import android.media.ToneGenerator;
 import android.nfc.NfcAdapter;
 import android.nfc.Tag;
 import android.nfc.tech.NfcF;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
 import android.webkit.JavascriptInterface;
 import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
@@ -39,10 +45,12 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
     private NfcAdapter nfcAdapter;
     private volatile Tag currentTag;
     private SharedPreferences bindings;
+    private SharedPreferences deviceSettings;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         bindings = getSharedPreferences("felica_bindings", MODE_PRIVATE);
+        deviceSettings = getSharedPreferences("device_settings", MODE_PRIVATE);
         webView = new WebView(this);
         setContentView(webView);
         WebSettings settings = webView.getSettings();
@@ -86,7 +94,8 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
     @Override protected void onResume() {
         super.onResume();
         if (nfcAdapter != null) nfcAdapter.enableReaderMode(this, this,
-            NfcAdapter.FLAG_READER_NFC_F | NfcAdapter.FLAG_READER_SKIP_NDEF_CHECK, null);
+            NfcAdapter.FLAG_READER_NFC_F | NfcAdapter.FLAG_READER_SKIP_NDEF_CHECK |
+                NfcAdapter.FLAG_READER_NO_PLATFORM_SOUNDS, null);
     }
 
     @Override protected void onPause() {
@@ -97,6 +106,7 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
 
     @Override public void onTagDiscovered(Tag tag) {
         currentTag = tag;
+        playCardFeedback();
         String idm = hex(tag.getId());
         String script = "window.dispatchEvent(new CustomEvent('android-felica-tag',{detail:{idm:'" + idm + "'}}));";
         runOnUiThread(() -> webView.evaluateJavascript(script, null));
@@ -115,9 +125,43 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
                     case "/card/write": return writeCard(body).toString();
                     case "/binding/lookup": return lookupBinding(body.optString("idm")).toString();
                     case "/binding/save": return saveBinding(body).toString();
+                    case "/feedback/get": return ok().put("mode", feedbackMode()).toString();
+                    case "/feedback/set": return saveFeedbackMode(body.optString("mode")).toString();
                     default: throw new Exception("未対応のFeliCa操作です: " + path);
                 }
             } catch (Exception error) { return failure(error).toString(); }
+        }
+    }
+
+    private String feedbackMode() {
+        return deviceSettings.getString("card_feedback", "normal");
+    }
+
+    private JSONObject saveFeedbackMode(String mode) throws Exception {
+        if (!Arrays.asList("silent", "small", "normal", "large", "vibration").contains(mode)) {
+            throw new Exception("カード確認音の設定値が不正です。");
+        }
+        if (!deviceSettings.edit().putString("card_feedback", mode).commit()) {
+            throw new Exception("カード確認音の設定を保存できませんでした。");
+        }
+        return ok().put("mode", mode);
+    }
+
+    private void playCardFeedback() {
+        String mode = feedbackMode();
+        if ("silent".equals(mode)) return;
+        Vibrator vibrator = getSystemService(Vibrator.class);
+        if (vibrator != null && vibrator.hasVibrator()) {
+            vibrator.vibrate(VibrationEffect.createOneShot(45, VibrationEffect.DEFAULT_AMPLITUDE));
+        }
+        if ("vibration".equals(mode)) return;
+        int volume = "small".equals(mode) ? 25 : "large".equals(mode) ? 100 : 60;
+        try {
+            ToneGenerator tone = new ToneGenerator(AudioManager.STREAM_NOTIFICATION, volume);
+            tone.startTone(ToneGenerator.TONE_PROP_BEEP, 80);
+            new Handler(Looper.getMainLooper()).postDelayed(tone::release, 180);
+        } catch (RuntimeException ignored) {
+            // Vibration still confirms the read when audio output is unavailable.
         }
     }
 

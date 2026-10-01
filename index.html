@@ -721,6 +721,16 @@
             <span>APIキー</span>
             <input id="cloudKey" type="password" placeholder="任意">
           </label>
+          <label id="cardFeedbackSetting" hidden>
+            <span>カードタッチ確認</span>
+            <select id="cardFeedbackMode">
+              <option value="silent">無音</option>
+              <option value="small">小</option>
+              <option value="normal">標準</option>
+              <option value="large">大</option>
+              <option value="vibration">振動のみ</option>
+            </select>
+          </label>
           <div class="sync-actions">
             <button class="primary" id="saveSettings" type="button">設定保存</button>
             <button class="ghost" id="pullCloud" type="button">クラウド読込</button>
@@ -736,6 +746,6 @@
     </section>
   </main>
 
-  <script src="./app.js?v=20261001-05" type="module"></script>
+  <script src="./app.js?v=20261001-06" type="module"></script>
 </body>
 </html>
