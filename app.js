@@ -806,6 +806,8 @@ function handleAndroidFelicaTag() {
     window.setTimeout(() => readFelicaCardAndOpenPatient(), 80);
   } else if (view === "mobile") {
     window.setTimeout(() => readFelicaCardAndLoadMobilePatient(), 80);
+  } else if (view === "reception") {
+    window.setTimeout(() => handleReceptionFelicaTag(), 80);
   }
 }
 
@@ -1068,6 +1070,34 @@ async function lookupReceptionPatient() {
     existing ? "この受診者は受付済みです" : "受診者を確認してください",
     existing ? `${formatVerificationDate(existing.receivedAt)}　${existing.method === "felica" ? "FeliCa受付" : "カードなし受付"}` : "氏名・性別・生年月日が正しければ受付方法を選択します。"
   );
+}
+
+async function handleReceptionFelicaTag() {
+  const armButton = document.querySelector("#armReceptionCard");
+  if (felicaBusy || armButton?.disabled) return;
+  try {
+    const card = await readFelicaCard();
+    if (receptionPatient) {
+      receptionWaitToken += 1;
+      await initializeReceptionCard(card);
+      return;
+    }
+    const result = await lookupFelicaBinding(card);
+    const binding = result.binding;
+    if (!binding) {
+      setReceptionState("warning", "未登録のカードです", "受診票の個人番号を読み取るか、手入力して受診者を選択してください。" );
+      return;
+    }
+    if (String(binding.groupId) !== String(activeGroup?.id || "")) {
+      setReceptionState("error", "別の予定グループのカードです", "現在の予定グループを確認してください。" );
+      return;
+    }
+    if (receptionPatientCode) receptionPatientCode.value = String(binding.patientCode || "");
+    await lookupReceptionPatient();
+    setFelicaStatus(`カード ${card.idm.slice(-4)} 受付済`, "ready");
+  } catch (error) {
+    setReceptionState("error", "カードを読み取れませんでした", error.message || "カードを当て直してください。" );
+  }
 }
 
 function renderReceptionPatient() {
@@ -3179,6 +3209,7 @@ async function loadEntryForPersonalNumber(personalNumber) {
   renderBloodConfirmationLog();
   await updatePatientSummary();
   updateEntryGuidanceSelection();
+  await updateEntryMenuStatuses();
   if (activeEntryGroup) await updateEntryVerificationUi();
 }
 

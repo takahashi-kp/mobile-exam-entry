@@ -369,6 +369,8 @@ body[data-view="mobile"] .workspace {
 
 .mobile-exam-page-head button {
   min-height: 38px;
+  min-width: 136px;
+  width: auto;
 }
 
 .mobile-patient-line {
@@ -404,9 +406,11 @@ body[data-view="mobile"] .workspace {
   flex: 0 0 auto;
   margin-left: auto;
   min-height: 36px;
+  min-width: 104px;
   padding: 6px 10px;
   position: sticky;
   right: 0;
+  width: auto;
 }
 
 .mobile-exam-tabs {
