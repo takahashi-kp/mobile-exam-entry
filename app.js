@@ -732,7 +732,7 @@ function bindUi() {
   document.querySelector("#loadMobilePatient")?.addEventListener("click", loadMobilePatient);
   document.querySelector("#changeMobilePatient")?.addEventListener("click", changeMobilePatient);
   document.querySelector("#confirmMobileExam")?.addEventListener("click", confirmMobileExam);
-  document.querySelector("#backFromMobileExam")?.addEventListener("click", () => switchView("entry"));
+  document.querySelector("#backFromMobileExam")?.addEventListener("click", returnFromMobileExam);
   mobilePatientCode?.addEventListener("keydown", (event) => {
     if (event.key !== "Enter") return;
     event.preventDefault();
@@ -1869,6 +1869,13 @@ async function returnToEntryMenu() {
     }
   }
   showEntryMenu();
+}
+
+async function returnFromMobileExam() {
+  if (!(await switchView("entry"))) return;
+  showEntryMenu();
+  await updateEntryMenuStatuses();
+  document.querySelector("#entryGroupMenu")?.scrollIntoView({ block: "start" });
 }
 
 async function openEntryGroup(groupKey) {
