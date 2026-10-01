@@ -638,6 +638,8 @@ body[data-view="mobile"] .workspace {
   display: grid;
   gap: 18px;
   grid-template-columns: minmax(430px, .9fr) minmax(500px, 1.1fr);
+  max-width: 100%;
+  min-width: 0;
 }
 
 .reception-workflow,
@@ -645,6 +647,7 @@ body[data-view="mobile"] .workspace {
   background: #f3f7f5;
   border: 1px solid #9eaaa6;
   border-radius: 7px;
+  min-width: 0;
   padding: 18px;
 }
 
@@ -861,10 +864,25 @@ body[data-view="mobile"] .workspace {
 }
 
 @media (max-width: 640px) {
+  #receptionView {
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    padding: 8px;
+  }
+
+  .reception-layout {
+    gap: 10px;
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+  }
+
   .reception-workflow,
   .reception-history,
   .recovery-reader,
   .recovery-results {
+    max-width: 100%;
+    min-width: 0;
     padding: 13px;
   }
 
@@ -873,13 +891,38 @@ body[data-view="mobile"] .workspace {
     flex-direction: column;
   }
 
+  .reception-heading > span,
+  .reception-state,
+  .reception-patient {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
   .reception-code-field > div,
   .reception-patient dl {
     grid-template-columns: 1fr;
   }
 
-  .reception-actions button {
+  .reception-code-field input {
+    min-width: 0;
     width: 100%;
+  }
+
+  .reception-code-field button,
+  .reception-actions button {
+    height: auto;
+    min-height: 44px;
+    padding: 9px 10px;
+    white-space: normal;
+    width: 100%;
+  }
+
+  .reception-history .table-wrap {
+    width: 100%;
+  }
+
+  .reception-history table {
+    min-width: 600px;
   }
 }
 
@@ -1713,7 +1756,10 @@ textarea:focus {
 .table-wrap {
   border: 1px solid var(--line);
   border-radius: 8px;
+  max-width: 100%;
+  min-width: 0;
   overflow: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .schedule-import {
