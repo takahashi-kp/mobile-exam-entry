@@ -12,3 +12,7 @@ dist/
 felica-native/target/
 tools/
 felica-webusb-test.html
+android-app/.gradle/
+android-app/local.properties
+android-app/build/
+android-app/app/build/
