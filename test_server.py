@@ -18,7 +18,7 @@ class MergePayloadTests(unittest.TestCase):
         guidance = client.get("/guidance.js")
 
         self.assertEqual(index.status_code, 200)
-        self.assertIn(b"app.js?v=20260929-09", index.data)
+        self.assertRegex(index.data, rb"app\.js\?v=\d{8}-\d{2}")
         self.assertIn(b'id="appToast"', index.data)
         self.assertIn(b'id="mobileView"', index.data)
         self.assertIn(b'id="mobileExamForm"', index.data)
@@ -43,6 +43,7 @@ class MergePayloadTests(unittest.TestCase):
         self.assertIn('data-entry-group="保健指導"'.encode(), index.data)
         self.assertIn('data-entry-group="採血"'.encode(), index.data)
         self.assertIn(b'id="bloodTubeBarcode"', index.data)
+
         self.assertIn('name="採血確認"'.encode(), index.data)
         self.assertIn('name="採血確認ログ"'.encode(), index.data)
         self.assertIn(b'id="bloodConfirmationRows"', index.data)
@@ -87,6 +88,19 @@ class MergePayloadTests(unittest.TestCase):
         index.close()
         script.close()
         guidance.close()
+
+    def test_android_installer_files_are_served(self):
+        client = app.test_client()
+
+        guide = client.get("/android-download.html")
+        apk = client.get("/downloads/mobile-exam-entry-android-v0.1.1.apk")
+
+        self.assertEqual(guide.status_code, 200)
+        self.assertIn("APKをダウンロード".encode(), guide.data)
+        self.assertEqual(apk.status_code, 200)
+        self.assertGreater(len(apk.data), 30000)
+        guide.close()
+        apk.close()
 
     def test_roster_export_endpoint_returns_xlsx(self):
         response = app.test_client().post(
