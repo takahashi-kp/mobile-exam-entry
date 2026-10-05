@@ -16,6 +16,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
+import android.util.Log;
 import android.webkit.JavascriptInterface;
 import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
@@ -39,6 +40,7 @@ import java.util.Locale;
 import java.util.zip.CRC32;
 
 public class MainActivity extends Activity implements NfcAdapter.ReaderCallback {
+    private static final String TAG = "MobileExamCamera";
     private static final String APP_URL = "https://mobile-exam-entry-b6w9-z574.onrender.com/";
     private static final String APP_HOST = "mobile-exam-entry-b6w9-z574.onrender.com";
     private static final int BLOCK_COUNT = 14;
@@ -141,23 +143,26 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
     }
 
     private void startBarcodeScan() {
+        Log.i(TAG, "Barcode scan requested");
         runOnUiThread(() -> {
-            IntentIntegrator scanner = new IntentIntegrator(this);
-            scanner.setDesiredBarcodeFormats(Arrays.asList(
-                IntentIntegrator.CODE_128,
-                IntentIntegrator.CODE_39,
-                IntentIntegrator.ITF,
-                IntentIntegrator.QR_CODE
-            ));
-            scanner.setPrompt("受診票の個人番号バーコードを枠内に合わせてください");
-            scanner.setBeepEnabled(true);
-            scanner.setBarcodeImageEnabled(false);
-            scanner.setOrientationLocked(false);
-            scanner.initiateScan();
+            try {
+                IntentIntegrator scanner = new IntentIntegrator(this);
+                scanner.setDesiredBarcodeFormats(IntentIntegrator.ALL_CODE_TYPES);
+                scanner.setPrompt("受診票の個人番号バーコードを枠内に合わせてください");
+                scanner.setBeepEnabled(true);
+                scanner.setBarcodeImageEnabled(false);
+                scanner.setOrientationLocked(false);
+                Log.i(TAG, "Starting CaptureActivity");
+                scanner.initiateScan();
+            } catch (RuntimeException error) {
+                Log.e(TAG, "Unable to start CaptureActivity", error);
+                dispatchBarcodeEvent("android-barcode-error", error.getMessage(), null);
+            }
         });
     }
 
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        Log.i(TAG, "Scanner result request=" + requestCode + " result=" + resultCode);
         IntentResult result = IntentIntegrator.parseActivityResult(requestCode, resultCode, data);
         if (result == null) {
             super.onActivityResult(requestCode, resultCode, data);
