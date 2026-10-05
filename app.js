@@ -808,6 +808,7 @@ function bindUi() {
 
 function setupNativeBarcodeScanner() {
   const available = Boolean(window.AndroidFelica?.request);
+  document.body.classList.toggle("native-android-app", available);
   document.querySelectorAll(".barcode-scan-button").forEach((button) => {
     button.hidden = true;
   });
@@ -1796,6 +1797,26 @@ function hydrateMobilePatientLine() {
   });
 }
 
+function hydrateEntryCompactPatientLine() {
+  const line = document.querySelector("#entryCompactPatientLine");
+  if (!line) return;
+  const visible = document.body.classList.contains("native-android-app") &&
+    (activeEntryGroup === "採血" || activeEntryGroup === "診察");
+  line.hidden = !visible;
+  if (!visible) return;
+  const values = {
+    entryCompactIdentityCode: form.elements.namedItem("個人番号")?.value || "",
+    entryCompactIdentityKana: form.elements.namedItem("カナ氏名")?.value || "",
+    entryCompactIdentityName: form.elements.namedItem("氏名")?.value || "",
+    entryCompactIdentitySex: form.elements.namedItem("性別名称")?.value || "",
+    entryCompactIdentityBirth: form.elements.namedItem("生年月日")?.value || ""
+  };
+  Object.entries(values).forEach(([id, value]) => {
+    const element = document.querySelector(`#${id}`);
+    if (element) element.textContent = value || "--";
+  });
+}
+
 function hydrateMobileExamFields() {
   mobileExamForm?.querySelectorAll("[data-mobile-field]").forEach((input) => {
     input.value = getEntryFormFieldValue(input.dataset.mobileField);
@@ -1965,6 +1986,7 @@ function showEntryMenu() {
   form.querySelectorAll(".section-block[data-group]").forEach((section) => {
     section.classList.remove("is-active-entry-group");
   });
+  hydrateEntryCompactPatientLine();
   updateEntryMenuStatuses();
 }
 
@@ -2011,6 +2033,7 @@ async function openEntryGroup(groupKey) {
   const title = document.querySelector("#entryGroupTitle");
   const menuButton = document.querySelector(`[data-entry-group="${cssEscape(groupKey)}"]`);
   if (title) title.textContent = menuButton?.dataset.entryLabel || groupKey;
+  hydrateEntryCompactPatientLine();
   if (groupKey === "診察") await renderDiagnosisReference();
   if (groupKey === "採血") renderBloodConfirmationLog();
   await updateEntryVerificationUi();
@@ -3811,6 +3834,7 @@ async function getPlannedPatient(code) {
 async function updatePatientSummary() {
   updatePatientAgeDisplay();
   updateIdentityEditButton();
+  hydrateEntryCompactPatientLine();
 }
 
 function setPatientIdentityEditable(editable) {

@@ -426,6 +426,16 @@ body[data-view="mobile"] .workspace {
   white-space: nowrap;
 }
 
+.entry-compact-patient-line {
+  border: 1px solid #8aa59e;
+  border-radius: 6px;
+  margin-bottom: 12px;
+}
+
+.entry-compact-patient-line[hidden] {
+  display: none;
+}
+
 .mobile-patient-line > span {
   display: inline-flex;
   flex-direction: column;

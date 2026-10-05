@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#176c6a">
   <title>出張健診 検査項目入力</title>
   <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="stylesheet" href="./styles.css?v=20261005-03">
+  <link rel="stylesheet" href="./styles.css?v=20261005-04">
 </head>
 <body>
   <div class="app-toast" id="appToast" role="status" aria-live="polite"></div>
@@ -109,6 +109,13 @@
             <button class="ghost" id="backToEntryMenu" type="button">入力画面へ戻る</button>
             <h2 id="entryGroupTitle"></h2>
             <button class="ghost barcode-scan-button" id="scanEntryGroupBarcode" type="button" aria-label="カメラで個人番号を読み取る" title="カメラ読取" hidden><span aria-hidden="true">📷</span></button>
+          </div>
+          <div class="mobile-patient-line entry-compact-patient-line" id="entryCompactPatientLine" aria-label="受診者情報" hidden>
+            <span><small>個人番号</small><strong id="entryCompactIdentityCode">--</strong></span>
+            <span><small>カナ氏名</small><strong id="entryCompactIdentityKana">--</strong></span>
+            <span><small>氏名</small><strong id="entryCompactIdentityName">--</strong></span>
+            <span><small>性別</small><strong id="entryCompactIdentitySex">--</strong></span>
+            <span><small>生年月日</small><strong id="entryCompactIdentityBirth">--</strong></span>
           </div>
 
           <div class="section-block compact" data-group="便区分">
@@ -759,6 +766,6 @@
     </section>
   </main>
 
-  <script src="./app.js?v=20261005-03" type="module"></script>
+  <script src="./app.js?v=20261005-04" type="module"></script>
 </body>
 </html>
