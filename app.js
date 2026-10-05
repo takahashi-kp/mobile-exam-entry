@@ -2264,6 +2264,10 @@ function queueBloodTubeBarcode(code) {
     .then(() => processBloodTubeBarcode(code))
     .catch(() => {
       toast("採血管バーコードの保存に失敗しました。もう一度読み取ってください。", true);
+    })
+    .finally(() => {
+      if (bloodTubeBarcode) bloodTubeBarcode.value = "";
+      requestAnimationFrame(() => bloodTubeBarcode?.focus());
     });
 }
 
@@ -2281,7 +2285,6 @@ async function processBloodTubeBarcode(scannedCode) {
     renderBloodConfirmationLog();
     showBloodBarcodeError("エラー　番号が一致しません");
     await updateEntryVerificationUi();
-    requestAnimationFrame(() => bloodTubeBarcode?.focus());
     return;
   }
   const confirmationLog = getBloodConfirmationLog();
@@ -2311,7 +2314,6 @@ async function processBloodTubeBarcode(scannedCode) {
     await updateEntryMenuStatuses();
     toast(activeBoothCanWriteFelica() ? "採血管を確認しました。「確認」を押してください。" : "採血管を確認し、採血を確定しました。" );
   }
-  requestAnimationFrame(() => bloodTubeBarcode?.focus());
 }
 
 function getBloodConfirmationLog() {
