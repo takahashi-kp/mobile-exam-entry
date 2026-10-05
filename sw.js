@@ -1,9 +1,9 @@
-const CACHE = "mobile-exam-entry-v110";
+const CACHE = "mobile-exam-entry-v111";
 const ASSETS = [
   "./",
   "./index.html",
-  "./styles.css?v=20261005-02",
-  "./app.js?v=20261005-02",
+  "./styles.css?v=20261005-03",
+  "./app.js?v=20261005-03",
   "./felica-payload.mjs?v=20260928-02",
   "./guidance.js?v=20260713-01",
   "./manifest.webmanifest"

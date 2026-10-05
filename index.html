@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#176c6a">
   <title>出張健診 検査項目入力</title>
   <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="stylesheet" href="./styles.css?v=20261005-02">
+  <link rel="stylesheet" href="./styles.css?v=20261005-03">
 </head>
 <body>
   <div class="app-toast" id="appToast" role="status" aria-live="polite"></div>
@@ -50,7 +50,7 @@
           <span>個人番号</span>
           <input class="personal-input" name="個人番号" form="examForm" inputmode="numeric" maxlength="11">
         </label>
-        <button class="ghost barcode-scan-button" id="scanEntryBarcode" type="button" hidden>カメラ読取</button>
+        <button class="ghost barcode-scan-button" id="scanEntryBarcode" type="button" aria-label="カメラで個人番号を読み取る" title="カメラ読取" hidden><span aria-hidden="true">📷</span></button>
         <label class="short-field walkin-kana-field identity-field">
           <span>カナ氏名</span>
           <input class="walkin-kana-input identity-input" name="カナ氏名" form="examForm" readonly>
@@ -82,7 +82,10 @@
       <section class="view is-visible" id="entryView">
         <div class="entry-group-menu" id="entryGroupMenu">
           <div class="entry-menu-head">
-            <h2>入力する検査を選択</h2>
+            <div class="entry-menu-title-row">
+              <h2>入力する検査を選択</h2>
+              <button class="ghost barcode-scan-button" id="scanEntryMenuBarcode" type="button" aria-label="カメラで個人番号を読み取る" title="カメラ読取" hidden><span aria-hidden="true">📷</span></button>
+            </div>
             <p>検査グループを選ぶと、その検査だけの入力画面を表示します。</p>
           </div>
           <div class="entry-group-buttons">
@@ -105,6 +108,7 @@
           <div class="entry-group-page-head">
             <button class="ghost" id="backToEntryMenu" type="button">入力画面へ戻る</button>
             <h2 id="entryGroupTitle"></h2>
+            <button class="ghost barcode-scan-button" id="scanEntryGroupBarcode" type="button" aria-label="カメラで個人番号を読み取る" title="カメラ読取" hidden><span aria-hidden="true">📷</span></button>
           </div>
 
           <div class="section-block compact" data-group="便区分">
@@ -429,7 +433,7 @@
           <div>
             <input id="mobilePatientCode" inputmode="numeric" autocomplete="off" placeholder="個人番号を入力">
             <button class="primary" id="loadMobilePatient" type="button">表示</button>
-            <button class="ghost barcode-scan-button" id="scanMobileBarcode" type="button" hidden>カメラ読取</button>
+            <button class="ghost barcode-scan-button" id="scanMobileBarcode" type="button" aria-label="カメラで個人番号を読み取る" title="カメラ読取" hidden><span aria-hidden="true">📷</span></button>
           </div>
           <p>個人番号を入力して受診者を表示してください。</p>
         </div>
@@ -441,6 +445,7 @@
             <span><small>氏名</small><strong id="mobileIdentityName"></strong></span>
             <span><small>性別</small><strong id="mobileIdentitySex"></strong></span>
             <span><small>生年月日</small><strong id="mobileIdentityBirth"></strong></span>
+            <button class="ghost barcode-scan-button" id="scanMobileWorkspaceBarcode" type="button" aria-label="カメラで個人番号を読み取る" title="カメラ読取" hidden><span aria-hidden="true">📷</span></button>
             <button class="ghost mobile-change-patient" id="changeMobilePatient" type="button">受診者変更</button>
           </div>
 
@@ -497,7 +502,7 @@
               <div>
                 <input id="receptionPatientCode" inputmode="numeric" autocomplete="off" placeholder="バーコード読取または手入力">
                 <button class="primary" id="lookupReceptionPatient" type="button">受診者を表示</button>
-                <button class="ghost barcode-scan-button" id="scanReceptionBarcode" type="button" hidden>カメラ読取</button>
+                <button class="ghost barcode-scan-button" id="scanReceptionBarcode" type="button" aria-label="カメラで個人番号を読み取る" title="カメラ読取" hidden><span aria-hidden="true">📷</span></button>
               </div>
             </label>
             <div class="reception-patient" id="receptionPatient" hidden>
@@ -754,6 +759,6 @@
     </section>
   </main>
 
-  <script src="./app.js?v=20261005-02" type="module"></script>
+  <script src="./app.js?v=20261005-03" type="module"></script>
 </body>
 </html>

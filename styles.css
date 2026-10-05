@@ -387,6 +387,10 @@ body[data-view="mobile"] .workspace {
   min-width: 88px;
 }
 
+.mobile-patient-lookup .barcode-scan-button {
+  min-width: 44px;
+}
+
 .mobile-patient-lookup p {
   color: var(--muted);
   margin: 8px 0 0;
@@ -731,7 +735,18 @@ body[data-view="mobile"] .workspace {
 }
 
 .barcode-scan-button {
+  flex: 0 0 44px;
+  font-size: 21px;
+  height: 44px;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0;
   white-space: nowrap;
+  width: 44px;
+}
+
+.barcode-scan-button span {
+  line-height: 1;
 }
 
 body.native-no-nfc .felica-controls,
@@ -989,6 +1004,17 @@ body.native-no-nfc #armReceptionCard {
   margin-bottom: 16px;
 }
 
+.entry-menu-title-row {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.entry-menu-title-row h2 {
+  margin: 0;
+}
+
 .entry-menu-head h2,
 .entry-menu-head p {
   margin-bottom: 6px;
@@ -1028,6 +1054,7 @@ body.native-no-nfc #armReceptionCard {
 }
 
 .entry-group-page-head h2 {
+  flex: 1;
   font-size: 19px;
   margin: 0;
 }
