@@ -369,6 +369,7 @@ let activeMobileGroup = "視力";
 const mobileDirtyGroups = new Set();
 let entryGroupDirty = false;
 let bloodScanQueue = Promise.resolve();
+let nativeBarcodeTarget = "patient";
 let personalChangeQueue = Promise.resolve();
 let lastFelicaCard = null;
 let felicaBusy = false;
@@ -824,15 +825,18 @@ function setupNativeBarcodeScanner() {
   }
 }
 
-async function startNativeBarcodeScan() {
+async function startNativeBarcodeScan(event) {
+  nativeBarcodeTarget = event?.currentTarget?.dataset.barcodeTarget || "patient";
   try {
     await felicaRequest("/barcode/scan", {});
   } catch (error) {
+    nativeBarcodeTarget = "patient";
     toast(error.message || "カメラを起動できませんでした。", true);
   }
 }
 
 function handleAndroidBarcodeError(event) {
+  nativeBarcodeTarget = "patient";
   const detail = String(event.detail?.text || "").trim();
   toast(detail || "カメラを起動できませんでした。ほかのカメラアプリを閉じて、もう一度お試しください。", true);
 }
@@ -841,6 +845,13 @@ async function handleAndroidBarcodeScanned(event) {
   const code = String(event.detail?.text || "").trim();
   if (!code) {
     toast("バーコードを読み取れませんでした。", true);
+    return;
+  }
+  const target = nativeBarcodeTarget;
+  nativeBarcodeTarget = "patient";
+  if (target === "blood-tube" && document.body.dataset.view === "entry" && activeEntryGroup === "採血") {
+    if (bloodTubeBarcode) bloodTubeBarcode.value = code;
+    queueBloodTubeBarcode(code);
     return;
   }
   const view = document.body.dataset.view;
@@ -2245,6 +2256,10 @@ function handleBloodTubeBarcodeKeydown(event) {
   if (!code) return;
   event.preventDefault();
   event.target.value = "";
+  queueBloodTubeBarcode(code);
+}
+
+function queueBloodTubeBarcode(code) {
   bloodScanQueue = bloodScanQueue
     .then(() => processBloodTubeBarcode(code))
     .catch(() => {

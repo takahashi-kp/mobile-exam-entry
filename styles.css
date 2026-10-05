@@ -1256,10 +1256,18 @@ body[data-view="mobile"] #newRecord {
   max-width: 520px;
 }
 
-.blood-barcode-field input {
+.blood-barcode-control {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) 44px;
+}
+
+.blood-barcode-control input {
   font-size: 20px;
   font-weight: 700;
   letter-spacing: .04em;
+  min-width: 0;
 }
 
 .blood-barcode-error {

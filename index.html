@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#176c6a">
   <title>出張健診 検査項目入力</title>
   <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="stylesheet" href="./styles.css?v=20261005-05">
+  <link rel="stylesheet" href="./styles.css?v=20261005-06">
 </head>
 <body>
   <div class="app-toast" id="appToast" role="status" aria-live="polite"></div>
@@ -339,10 +339,13 @@
           <div class="section-block blood-section" data-group="採血">
             <h2>採血</h2>
             <p class="blood-instruction">採血管のバーコードを1本ずつ読み取って、個人番号と氏名を確認してください。</p>
-            <label class="blood-barcode-field">
-              <span>採血管バーコード</span>
-              <input id="bloodTubeBarcode" inputmode="numeric" autocomplete="off" maxlength="64" placeholder="バーコードを読み取ってEnter">
-            </label>
+            <div class="blood-barcode-field">
+              <label for="bloodTubeBarcode">採血管バーコード</label>
+              <div class="blood-barcode-control">
+                <input id="bloodTubeBarcode" inputmode="numeric" autocomplete="off" maxlength="64" placeholder="バーコードを読み取ってEnter">
+                <button class="ghost barcode-scan-button" id="scanBloodTubeBarcode" type="button" data-barcode-target="blood-tube" aria-label="カメラで採血管バーコードを読み取る" title="採血管バーコードをカメラで読み取る" hidden><span aria-hidden="true">📷</span></button>
+              </div>
+            </div>
             <div class="blood-barcode-error" id="bloodBarcodeError" role="alert" hidden>エラー　番号が一致しません</div>
             <div class="blood-confirmation-head">
               <strong id="bloodConfirmationCount">確認 0件</strong>
@@ -768,6 +771,6 @@
     </section>
   </main>
 
-  <script src="./app.js?v=20261005-07" type="module"></script>
+  <script src="./app.js?v=20261005-08" type="module"></script>
 </body>
 </html>
