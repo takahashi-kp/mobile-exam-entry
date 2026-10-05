@@ -436,6 +436,42 @@ body[data-view="mobile"] .workspace {
   display: none;
 }
 
+body.native-android-app[data-view="entry"][data-entry-group="採血"] .top-stack,
+body.native-android-app[data-view="entry"][data-entry-group="診察"] .top-stack {
+  display: none;
+}
+
+body.native-android-app[data-view="entry"][data-entry-group="採血"] .shell,
+body.native-android-app[data-view="entry"][data-entry-group="診察"] .shell {
+  padding-top: 0;
+}
+
+body.native-android-app[data-view="entry"][data-entry-group="採血"] .workspace,
+body.native-android-app[data-view="entry"][data-entry-group="診察"] .workspace {
+  overflow: visible;
+}
+
+body.native-android-app[data-view="entry"][data-entry-group="採血"] .entry-special-sticky-head,
+body.native-android-app[data-view="entry"][data-entry-group="診察"] .entry-special-sticky-head {
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  z-index: 9;
+}
+
+body.native-android-app[data-view="entry"][data-entry-group="採血"] .entry-group-page-head,
+body.native-android-app[data-view="entry"][data-entry-group="診察"] .entry-group-page-head {
+  margin: 0;
+  padding: 8px 0;
+}
+
+body.native-android-app[data-view="entry"][data-entry-group="採血"] .entry-compact-patient-line,
+body.native-android-app[data-view="entry"][data-entry-group="診察"] .entry-compact-patient-line {
+  border-radius: 0;
+  margin: 0;
+}
+
 .mobile-patient-line > span {
   display: inline-flex;
   flex-direction: column;

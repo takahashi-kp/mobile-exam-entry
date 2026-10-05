@@ -1979,6 +1979,7 @@ async function confirmMobileExam() {
 
 function showEntryMenu() {
   activeEntryGroup = "";
+  delete document.body.dataset.entryGroup;
   entryGroupDirty = false;
   document.body.dataset.entryMode = "menu";
   document.querySelector("#entryGroupMenu")?.classList.remove("is-hidden");
@@ -2018,6 +2019,7 @@ async function openEntryGroup(groupKey) {
   const section = form.querySelector(`.section-block[data-group="${cssEscape(groupKey)}"]`);
   if (!section) return;
   activeEntryGroup = groupKey;
+  document.body.dataset.entryGroup = groupKey;
   entryGroupDirty = false;
   boothCardPresent = false;
   boothCardIdm = "";
