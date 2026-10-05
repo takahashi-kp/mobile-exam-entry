@@ -151,7 +151,7 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
                 scanner.setPrompt("受診票の個人番号バーコードを枠内に合わせてください");
                 scanner.setBeepEnabled(true);
                 scanner.setBarcodeImageEnabled(false);
-                scanner.setOrientationLocked(false);
+                scanner.setOrientationLocked(true);
                 scanner.setCaptureActivity(RetryBarcodeActivity.class);
                 Log.i(TAG, "Starting CaptureActivity");
                 scanner.initiateScan();

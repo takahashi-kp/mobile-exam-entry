@@ -855,11 +855,23 @@ async function handleAndroidBarcodeScanned(event) {
     return;
   }
   if (view === "entry") {
-    const personalInput = form.elements.namedItem("個人番号");
-    personalInput.value = code;
-    await handlePersonalNumberChange({ target: personalInput, stopPropagation() {} });
+    await loadEntryPatientFromBarcode(code);
     toast(`個人番号 ${code} を読み取りました`);
   }
+}
+
+async function loadEntryPatientFromBarcode(code) {
+  const personalInput = form.elements.namedItem("個人番号");
+  const currentCode = String(personalValueBeforeEdit || personalInput?.value || "").trim();
+  if (currentCode && currentCode !== code && (isDirty || entryGroupDirty) && hasCurrentInput()) {
+    personalInput.value = code;
+    await handlePersonalNumberChange({ target: personalInput, stopPropagation() {} });
+  } else {
+    await loadEntryForPersonalNumber(code);
+  }
+  await updatePatientSummary();
+  if (activeEntryGroup) await updateEntryVerificationUi();
+  if (activeEntryGroup === "採血") scheduleBloodPatientRefresh();
 }
 
 function handleAndroidFelicaTag() {
