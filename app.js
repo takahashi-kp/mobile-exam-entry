@@ -726,7 +726,7 @@ function bindUi() {
   });
   document.querySelector("#exportCsv").addEventListener("click", exportCsv);
   document.querySelector("#exportRosters")?.addEventListener("click", exportRosters);
-  document.querySelectorAll("[data-entry-group]").forEach((button) => {
+  document.querySelectorAll("button[data-entry-group]").forEach((button) => {
     button.dataset.entryLabel = button.textContent.trim();
     button.addEventListener("click", () => openEntryGroup(button.dataset.entryGroup));
   });
@@ -2045,7 +2045,7 @@ async function openEntryGroup(groupKey) {
   });
   setGroupCollapsed(section, false, false);
   const title = document.querySelector("#entryGroupTitle");
-  const menuButton = document.querySelector(`[data-entry-group="${cssEscape(groupKey)}"]`);
+  const menuButton = document.querySelector(`button[data-entry-group="${cssEscape(groupKey)}"]`);
   if (title) title.textContent = menuButton?.dataset.entryLabel || groupKey;
   hydrateEntryCompactPatientLine();
   if (groupKey === "診察") await renderDiagnosisReference();
@@ -2095,7 +2095,9 @@ async function updateEntryMenuStatuses() {
   const record = await getCurrentRecord();
   const groupValues = record ? await getGroupValuesForRecord(record) : [];
   const byGroup = new Map(groupValues.map((item) => [item.groupKey, item]));
-  document.querySelectorAll("[data-entry-group]").forEach((button) => {
+  // The body also carries data-entry-group while a booth is open. Restrict this
+  // selector to menu buttons so updating their status can never replace the page.
+  document.querySelectorAll("button[data-entry-group]").forEach((button) => {
     const label = button.dataset.entryLabel || button.textContent.trim();
     if (!isVerifiableEntryGroup(button.dataset.entryGroup)) {
       button.textContent = label;
