@@ -1,6 +1,6 @@
 # Android版 出張健診
 
-現在のWebアプリを全画面WebViewで表示するAndroidアプリです。IndexedDB、Service Worker、カメラ権限、Android内蔵NFCによるFeliCa Lite-Sの読取り・書込みに対応します。
+現在のWebアプリを全画面WebViewで表示するAndroidアプリです。IndexedDB、Service Worker、カメラによる受診票バーコード読取、Android内蔵NFCによるFeliCa Lite-Sの読取り・書込みに対応します。
 
 ## ビルド
 
@@ -13,7 +13,7 @@
 ## 他端末へのテスト配布
 
 `gradlew.bat assembleDebug` で生成した `app/build/outputs/apk/debug/app-debug.apk` を、Web配信用の
-`downloads/mobile-exam-entry-android-v0.1.2.apk` として配置します。端末では
+`downloads/mobile-exam-entry-android-v0.1.3.apk` として配置します。端末では
 `/android-download.html` を開き、APKをダウンロードしてインストールします。
 
 このAPKは社内テスト用です。正式運用版は専用のリリース署名鍵を作成し、鍵を安全な場所へ

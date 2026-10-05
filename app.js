@@ -395,6 +395,7 @@ async function init() {
   setupCollapsibleGroups();
   showEntryMenu();
   bindUi();
+  setupNativeBarcodeScanner();
   checkFelicaHelper();
   await loadSettings();
   await prepareSyncSchemaV2();
@@ -701,7 +702,11 @@ function bindUi() {
   identityEditButton?.addEventListener("click", () => setPatientIdentityEditable(true));
   felicaReadCardButton?.addEventListener("click", readFelicaCardAndOpenPatient);
   window.addEventListener("android-felica-tag", handleAndroidFelicaTag);
+  window.addEventListener("android-barcode-scanned", handleAndroidBarcodeScanned);
   window.addEventListener("android-back-request", handleAndroidBackRequest);
+  document.querySelectorAll(".barcode-scan-button").forEach((button) => {
+    button.addEventListener("click", startNativeBarcodeScan);
+  });
   document.querySelector("#lookupReceptionPatient")?.addEventListener("click", lookupReceptionPatient);
   receptionPatientCode?.addEventListener("keydown", (event) => {
     if (event.key !== "Enter") return;
@@ -798,6 +803,53 @@ function bindUi() {
   ["氏名", "カナ氏名", "性別名称", "生年月日"].forEach((name) => {
     form.elements.namedItem(name)?.addEventListener("input", updatePatientSummary);
   });
+}
+
+function setupNativeBarcodeScanner() {
+  const available = Boolean(window.AndroidFelica?.request);
+  document.querySelectorAll(".barcode-scan-button").forEach((button) => {
+    button.hidden = !available;
+  });
+  if (!available) return;
+  try {
+    const capabilities = JSON.parse(window.AndroidFelica.request("/capabilities", "{}") || "{}");
+    document.body.classList.toggle("native-no-nfc", capabilities.ok && capabilities.nfc === false);
+  } catch {
+    // Older Android builds do not expose capabilities and keep the existing FeliCa controls.
+  }
+}
+
+async function startNativeBarcodeScan() {
+  try {
+    await felicaRequest("/barcode/scan", {});
+  } catch (error) {
+    toast(error.message || "カメラを起動できませんでした。", true);
+  }
+}
+
+async function handleAndroidBarcodeScanned(event) {
+  const code = String(event.detail?.text || "").trim();
+  if (!code) {
+    toast("バーコードを読み取れませんでした。", true);
+    return;
+  }
+  const view = document.body.dataset.view;
+  if (view === "reception") {
+    receptionPatientCode.value = code;
+    await lookupReceptionPatient();
+    return;
+  }
+  if (view === "mobile") {
+    mobilePatientCode.value = code;
+    await loadMobilePatient();
+    return;
+  }
+  if (view === "entry") {
+    const personalInput = form.elements.namedItem("個人番号");
+    personalInput.value = code;
+    await handlePersonalNumberChange({ target: personalInput, stopPropagation() {} });
+    toast(`個人番号 ${code} を読み取りました`);
+  }
 }
 
 function handleAndroidFelicaTag() {

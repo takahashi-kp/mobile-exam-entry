@@ -353,7 +353,7 @@ body[data-view="mobile"] .workspace {
 .mobile-patient-lookup > div {
   display: grid;
   gap: 8px;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr auto auto;
 }
 
 .mobile-patient-lookup input {
@@ -702,7 +702,20 @@ body[data-view="mobile"] .workspace {
 .reception-code-field > div {
   display: grid;
   gap: 8px;
-  grid-template-columns: minmax(180px, 1fr) max-content;
+  grid-template-columns: minmax(180px, 1fr) max-content max-content;
+}
+
+.barcode-scan-button[hidden] {
+  display: none;
+}
+
+.barcode-scan-button {
+  white-space: nowrap;
+}
+
+body.native-no-nfc .felica-controls,
+body.native-no-nfc #armReceptionCard {
+  display: none;
 }
 
 .reception-code-field input {

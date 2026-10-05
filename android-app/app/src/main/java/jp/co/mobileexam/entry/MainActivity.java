@@ -2,6 +2,7 @@ package jp.co.mobileexam.entry;
 
 import android.Manifest;
 import android.app.Activity;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.net.Uri;
@@ -26,6 +27,9 @@ import android.window.OnBackInvokedDispatcher;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
+
+import com.google.zxing.integration.android.IntentIntegrator;
+import com.google.zxing.integration.android.IntentResult;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
@@ -116,6 +120,8 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
             try {
                 JSONObject body = bodyJson == null || bodyJson.isEmpty() ? new JSONObject() : new JSONObject(bodyJson);
                 switch (path) {
+                    case "/capabilities":
+                        return ok().put("barcodeCamera", true).put("nfc", nfcAdapter != null).toString();
                     case "/health":
                         if (nfcAdapter == null) throw new Exception("この端末はNFCに対応していません。");
                         if (!nfcAdapter.isEnabled()) throw new Exception("NFCが無効です。端末のNFCを有効にしてください。");
@@ -127,10 +133,52 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
                     case "/feedback/get": return ok().put("mode", feedbackMode()).toString();
                     case "/feedback/set": return saveFeedbackMode(body.optString("mode")).toString();
                     case "/feedback/play": playCardFeedback(body.optString("outcome")); return ok().toString();
+                    case "/barcode/scan": startBarcodeScan(); return ok().put("started", true).toString();
                     default: throw new Exception("未対応のFeliCa操作です: " + path);
                 }
             } catch (Exception error) { return failure(error).toString(); }
         }
+    }
+
+    private void startBarcodeScan() {
+        runOnUiThread(() -> {
+            IntentIntegrator scanner = new IntentIntegrator(this);
+            scanner.setDesiredBarcodeFormats(Arrays.asList(
+                IntentIntegrator.CODE_128,
+                IntentIntegrator.CODE_39,
+                IntentIntegrator.ITF,
+                IntentIntegrator.QR_CODE
+            ));
+            scanner.setPrompt("受診票の個人番号バーコードを枠内に合わせてください");
+            scanner.setBeepEnabled(true);
+            scanner.setBarcodeImageEnabled(false);
+            scanner.setOrientationLocked(false);
+            scanner.initiateScan();
+        });
+    }
+
+    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        IntentResult result = IntentIntegrator.parseActivityResult(requestCode, resultCode, data);
+        if (result == null) {
+            super.onActivityResult(requestCode, resultCode, data);
+            return;
+        }
+        if (result.getContents() == null) {
+            dispatchBarcodeEvent("android-barcode-cancelled", null, null);
+            return;
+        }
+        dispatchBarcodeEvent("android-barcode-scanned", result.getContents(), result.getFormatName());
+    }
+
+    private void dispatchBarcodeEvent(String eventName, String text, String format) {
+        JSONObject detail = new JSONObject();
+        try {
+            if (text != null) detail.put("text", text);
+            if (format != null) detail.put("format", format);
+        } catch (Exception ignored) { }
+        String script = "window.dispatchEvent(new CustomEvent(" + JSONObject.quote(eventName)
+            + ",{detail:" + detail + "}));";
+        runOnUiThread(() -> webView.evaluateJavascript(script, null));
     }
 
     private String feedbackMode() {
