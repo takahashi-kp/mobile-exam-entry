@@ -703,6 +703,7 @@ function bindUi() {
   felicaReadCardButton?.addEventListener("click", readFelicaCardAndOpenPatient);
   window.addEventListener("android-felica-tag", handleAndroidFelicaTag);
   window.addEventListener("android-barcode-scanned", handleAndroidBarcodeScanned);
+  window.addEventListener("android-barcode-error", handleAndroidBarcodeError);
   window.addEventListener("android-back-request", handleAndroidBackRequest);
   document.querySelectorAll(".barcode-scan-button").forEach((button) => {
     button.addEventListener("click", startNativeBarcodeScan);
@@ -808,14 +809,17 @@ function bindUi() {
 function setupNativeBarcodeScanner() {
   const available = Boolean(window.AndroidFelica?.request);
   document.querySelectorAll(".barcode-scan-button").forEach((button) => {
-    button.hidden = !available;
+    button.hidden = true;
   });
   if (!available) return;
   try {
     const capabilities = JSON.parse(window.AndroidFelica.request("/capabilities", "{}") || "{}");
     document.body.classList.toggle("native-no-nfc", capabilities.ok && capabilities.nfc === false);
+    document.querySelectorAll(".barcode-scan-button").forEach((button) => {
+      button.hidden = !(capabilities.ok && capabilities.barcodeCamera === true);
+    });
   } catch {
-    // Older Android builds do not expose capabilities and keep the existing FeliCa controls.
+    // Older Android builds do not contain the native barcode scanner.
   }
 }
 
@@ -825,6 +829,11 @@ async function startNativeBarcodeScan() {
   } catch (error) {
     toast(error.message || "カメラを起動できませんでした。", true);
   }
+}
+
+function handleAndroidBarcodeError(event) {
+  const detail = String(event.detail?.text || "").trim();
+  toast(detail || "カメラを起動できませんでした。ほかのカメラアプリを閉じて、もう一度お試しください。", true);
 }
 
 async function handleAndroidBarcodeScanned(event) {

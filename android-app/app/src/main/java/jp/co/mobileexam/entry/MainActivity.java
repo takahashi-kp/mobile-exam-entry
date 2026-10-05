@@ -152,6 +152,7 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
                 scanner.setBeepEnabled(true);
                 scanner.setBarcodeImageEnabled(false);
                 scanner.setOrientationLocked(false);
+                scanner.setCaptureActivity(RetryBarcodeActivity.class);
                 Log.i(TAG, "Starting CaptureActivity");
                 scanner.initiateScan();
             } catch (RuntimeException error) {
@@ -163,6 +164,11 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
 
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         Log.i(TAG, "Scanner result request=" + requestCode + " result=" + resultCode);
+        if (data != null && data.hasExtra(RetryBarcodeActivity.EXTRA_CAMERA_ERROR)) {
+            dispatchBarcodeEvent("android-barcode-error",
+                data.getStringExtra(RetryBarcodeActivity.EXTRA_CAMERA_ERROR), null);
+            return;
+        }
         IntentResult result = IntentIntegrator.parseActivityResult(requestCode, resultCode, data);
         if (result == null) {
             super.onActivityResult(requestCode, resultCode, data);

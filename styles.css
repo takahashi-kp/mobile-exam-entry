@@ -33,6 +33,27 @@ body.smartphone-device .top-stack {
   position: static;
 }
 
+@media (orientation: landscape) and (max-height: 600px) {
+  html,
+  body {
+    min-height: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .top-stack {
+    position: static;
+  }
+
+  body[data-view="entry"] .shell {
+    padding-top: 8px;
+  }
+
+  body[data-view="entry"] .workspace {
+    overflow: visible;
+  }
+}
+
 body.smartphone-device[data-view="entry"][data-entry-mode="menu"] .patient-sticky {
   display: none;
 }
