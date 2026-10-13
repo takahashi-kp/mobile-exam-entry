@@ -62,9 +62,9 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
     private static final int SLOT_BLOCKS = 7;
     private static final int MAX_PAYLOAD = 96;
     private static final int MEASUREMENT_CAMERA_REQUEST = 4201;
-    private static final Pattern DECIMAL_VALUE = Pattern.compile("(?<![0-9])([0-9]{1,3}(?:[.,][0-9])?)(?![0-9])");
-    private static final Pattern HEIGHT_WITH_UNIT = Pattern.compile("([0-9]{1,3}(?:[.,][0-9])?)\\s*c[mn]", Pattern.CASE_INSENSITIVE);
-    private static final Pattern WEIGHT_WITH_UNIT = Pattern.compile("([0-9]{1,3}(?:[.,][0-9])?)\\s*k[gq]", Pattern.CASE_INSENSITIVE);
+    private static final Pattern DECIMAL_VALUE = Pattern.compile("(?<![0-9])([0-9]{1,4}(?:[.,][0-9])?)(?![0-9])");
+    private static final Pattern HEIGHT_WITH_UNIT = Pattern.compile("([0-9]{1,4}(?:[.,][0-9])?)\\s*c[mn]", Pattern.CASE_INSENSITIVE);
+    private static final Pattern WEIGHT_WITH_UNIT = Pattern.compile("([0-9]{1,4}(?:[.,][0-9])?)\\s*k[gq]", Pattern.CASE_INSENSITIVE);
     private static final byte[] MAGIC = new byte[]{0x4d, 0x45, 0x58, 0x31};
     private WebView webView;
     private NfcAdapter nfcAdapter;
@@ -238,7 +238,9 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
                     try {
                         Measurement measurement = extractMeasurement(text);
                         if (measurement == null) {
-                            dispatchMeasurementError("身長と体重を認識できませんでした。表示器全体を正面から撮影してください。");
+                            String recognized = summarizeRecognizedText(text.getText());
+                            dispatchMeasurementError("身長と体重を認識できませんでした。表示器全体を正面から撮影してください。"
+                                + (recognized.isEmpty() ? "" : " 認識文字: " + recognized));
                         } else {
                             JSONObject detail = new JSONObject()
                                 .put("height", formatMeasurement(measurement.height))
@@ -274,34 +276,65 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
                 Rect box = line.getBoundingBox();
                 Double unitHeight = firstPatternValue(HEIGHT_WITH_UNIT, normalized);
                 Double unitWeight = firstPatternValue(WEIGHT_WITH_UNIT, normalized);
-                if (unitHeight != null && validHeight(unitHeight)) height = unitHeight;
-                if (unitWeight != null && validWeight(unitWeight)) weight = unitWeight;
+                unitHeight = normalizeHeightValue(unitHeight);
+                unitWeight = normalizeWeightValue(unitWeight);
+                if (unitHeight != null) height = unitHeight;
+                if (unitWeight != null) weight = unitWeight;
                 Matcher matcher = DECIMAL_VALUE.matcher(normalized);
                 while (matcher.find()) {
                     double value;
                     try { value = Double.parseDouble(matcher.group(1).replace(',', '.')); }
                     catch (NumberFormatException ignored) { continue; }
                     candidates.add(new NumericCandidate(value, box == null ? 0 : box.centerX(), box == null ? 0 : box.centerY()));
-                    if (unitHeight == null && !lower.contains("kg") && normalized.contains("身長") && validHeight(value)) height = value;
-                    if (unitWeight == null && !lower.contains("cm") && normalized.contains("体重") && validWeight(value)) weight = value;
+                    Double heightValue = normalizeHeightValue(value);
+                    Double weightValue = normalizeWeightValue(value);
+                    if (unitHeight == null && !lower.contains("kg") && normalized.contains("身長") && heightValue != null) height = heightValue;
+                    if (unitWeight == null && !lower.contains("cm") && normalized.contains("体重") && weightValue != null) weight = weightValue;
                 }
             }
         }
         candidates.sort(Comparator.comparingInt((NumericCandidate item) -> item.y).thenComparingInt(item -> item.x));
         if (height == null) {
-            for (NumericCandidate item : candidates) if (validHeight(item.value)) { height = item.value; break; }
+            for (NumericCandidate item : candidates) {
+                Double value = normalizeHeightValue(item.value);
+                if (value != null) { height = value; break; }
+            }
         }
         if (weight == null) {
             for (NumericCandidate item : candidates) {
-                if (validWeight(item.value) && (height == null || Math.abs(item.value - height) > 0.01)) { weight = item.value; break; }
+                Double value = normalizeWeightValue(item.value);
+                if (value != null && (height == null || Math.abs(value - height) > 0.01)) { weight = value; break; }
             }
         }
         return height != null && weight != null ? new Measurement(height, weight) : null;
     }
 
     private String normalizeOcrText(String text) {
-        return text.replace('O', '0').replace('o', '0').replace('I', '1').replace('l', '1')
-            .replace('，', ',').replace('．', '.');
+        String normalized = text.replace('O', '0').replace('o', '0').replace('I', '1').replace('l', '1')
+            .replace('|', '1').replace('，', ',').replace('．', '.');
+        normalized = normalized.replaceAll("(?<![A-Za-z])[Ss](?=[0-9.,])|(?<=[0-9.,])[Ss](?![A-Za-z])", "5");
+        normalized = normalized.replaceAll("(?<![A-Za-z])[Bb](?=[0-9.,])|(?<=[0-9.,])[Bb](?![A-Za-z])", "8");
+        return normalized;
+    }
+
+    private Double normalizeHeightValue(Double value) {
+        if (value == null) return null;
+        if (validHeight(value)) return value;
+        double shifted = value / 10.0;
+        return value >= 880.0 && value <= 2100.0 && validHeight(shifted) ? shifted : null;
+    }
+
+    private Double normalizeWeightValue(Double value) {
+        if (value == null) return null;
+        if (validWeight(value)) return value;
+        double shifted = value / 10.0;
+        return value > 150.8 && value <= 1508.0 && validWeight(shifted) ? shifted : null;
+    }
+
+    private String summarizeRecognizedText(String text) {
+        if (text == null) return "";
+        String summary = text.replaceAll("\\s+", " ").trim();
+        return summary.length() <= 80 ? summary : summary.substring(0, 80) + "...";
     }
 
     private Double firstPatternValue(Pattern pattern, String text) {
