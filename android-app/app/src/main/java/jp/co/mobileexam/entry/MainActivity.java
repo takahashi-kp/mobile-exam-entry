@@ -44,6 +44,7 @@ import com.google.mlkit.vision.common.InputImage;
 import com.google.mlkit.vision.text.Text;
 import com.google.mlkit.vision.text.TextRecognition;
 import com.google.mlkit.vision.text.TextRecognizer;
+import com.google.mlkit.vision.text.japanese.JapaneseTextRecognizerOptions;
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
 
 import java.io.ByteArrayOutputStream;
@@ -237,18 +238,17 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
             Bitmap original = decodeOrientedBitmap(photo);
             if (original == null) throw new Exception("撮影画像を読み込めませんでした。");
             Bitmap enhanced = enhanceMeasurementBitmap(original);
-            TextRecognizer recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
-            recognizer.process(InputImage.fromBitmap(original, 0))
-                .addOnSuccessListener(firstText -> recognizer.process(InputImage.fromBitmap(enhanced, 0))
-                    .addOnSuccessListener(secondText -> finishMeasurementRecognition(firstText, secondText))
-                    .addOnFailureListener(error -> finishMeasurementRecognition(firstText, null))
-                    .addOnCompleteListener(task -> closeMeasurementRecognition(recognizer, original, enhanced)))
-                .addOnFailureListener(error -> {
-                    recognizer.process(InputImage.fromBitmap(enhanced, 0))
-                        .addOnSuccessListener(secondText -> finishMeasurementRecognition(null, secondText))
-                        .addOnFailureListener(secondError -> dispatchMeasurementError("画像の文字認識に失敗しました。もう一度撮影してください。"))
-                        .addOnCompleteListener(task -> closeMeasurementRecognition(recognizer, original, enhanced));
-                });
+            TextRecognizer latinRecognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
+            TextRecognizer japaneseRecognizer = TextRecognition.getClient(new JapaneseTextRecognizerOptions.Builder().build());
+            latinRecognizer.process(InputImage.fromBitmap(original, 0)).addOnCompleteListener(firstTask ->
+                latinRecognizer.process(InputImage.fromBitmap(enhanced, 0)).addOnCompleteListener(secondTask ->
+                    japaneseRecognizer.process(InputImage.fromBitmap(original, 0)).addOnCompleteListener(thirdTask -> {
+                        Text firstText = firstTask.isSuccessful() ? firstTask.getResult() : null;
+                        Text secondText = secondTask.isSuccessful() ? secondTask.getResult() : null;
+                        Text thirdText = thirdTask.isSuccessful() ? thirdTask.getResult() : null;
+                        finishMeasurementRecognition(firstText, secondText, thirdText);
+                        closeMeasurementRecognition(latinRecognizer, japaneseRecognizer, original, enhanced);
+                    })));
         } catch (Exception error) {
             deleteMeasurementPhoto();
             dispatchMeasurementError(error.getMessage());
@@ -300,22 +300,31 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
         return enhanced;
     }
 
-    private void finishMeasurementRecognition(Text firstText, Text secondText) {
+    private void finishMeasurementRecognition(Text firstText, Text secondText, Text thirdText) {
         try {
             Measurement first = firstText == null ? null : extractMeasurement(firstText);
             Measurement second = secondText == null ? null : extractMeasurement(secondText);
+            Measurement third = thirdText == null ? null : extractMeasurement(thirdText);
             Log.i(TAG, "Measurement OCR original=" + summarizeRecognizedText(firstText == null ? "" : firstText.getText())
-                + " enhanced=" + summarizeRecognizedText(secondText == null ? "" : secondText.getText()));
-            if (first != null && second != null && !sameMeasurement(first, second)) {
-                dispatchMeasurementError("認識結果が一致しません。候補: 身長 " + formatMeasurement(first.height)
-                    + "cm・体重 " + formatMeasurement(first.weight) + "kg / 身長 " + formatMeasurement(second.height)
-                    + "cm・体重 " + formatMeasurement(second.weight) + "kg。表示器を正面から再撮影してください。");
-                return;
+                + " enhanced=" + summarizeRecognizedText(secondText == null ? "" : secondText.getText())
+                + " japanese=" + summarizeRecognizedText(thirdText == null ? "" : thirdText.getText()));
+            List<Measurement> measurements = new ArrayList<>();
+            if (first != null) measurements.add(first);
+            if (second != null) measurements.add(second);
+            if (third != null) measurements.add(third);
+            Measurement measurement = measurements.isEmpty() ? null : measurements.get(0);
+            for (Measurement candidate : measurements) {
+                if (!sameMeasurement(measurement, candidate)) {
+                    dispatchMeasurementError("認識結果が一致しません。候補: 身長 " + formatMeasurement(measurement.height)
+                        + "cm・体重 " + formatMeasurement(measurement.weight) + "kg / 身長 " + formatMeasurement(candidate.height)
+                        + "cm・体重 " + formatMeasurement(candidate.weight) + "kg。表示器を正面から再撮影してください。");
+                    return;
+                }
             }
-            Measurement measurement = first != null ? first : second;
             if (measurement == null) {
                 String recognized = summarizeRecognizedText((firstText == null ? "" : firstText.getText()) + " "
-                    + (secondText == null ? "" : secondText.getText()));
+                    + (secondText == null ? "" : secondText.getText()) + " "
+                    + (thirdText == null ? "" : thirdText.getText()));
                 dispatchMeasurementError("身長と体重を認識できませんでした。表示器全体を正面から撮影してください。"
                     + (recognized.isEmpty() ? "" : " 認識文字: " + recognized));
                 return;
@@ -333,8 +342,10 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
         return Math.abs(first.height - second.height) < 0.05 && Math.abs(first.weight - second.weight) < 0.05;
     }
 
-    private void closeMeasurementRecognition(TextRecognizer recognizer, Bitmap original, Bitmap enhanced) {
-        recognizer.close();
+    private void closeMeasurementRecognition(TextRecognizer latinRecognizer, TextRecognizer japaneseRecognizer,
+                                              Bitmap original, Bitmap enhanced) {
+        latinRecognizer.close();
+        japaneseRecognizer.close();
         if (!original.isRecycled()) original.recycle();
         if (!enhanced.isRecycled()) enhanced.recycle();
         deleteMeasurementPhoto();
