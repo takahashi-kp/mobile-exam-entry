@@ -254,12 +254,23 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
                             return;
                         }
                         Bitmap finalFocused = focused;
+                        Bitmap thresholded = thresholdMeasurementBitmap(finalFocused, false);
+                        Bitmap inverted = thresholdMeasurementBitmap(finalFocused, true);
                         latinRecognizer.process(InputImage.fromBitmap(finalFocused, 0)).addOnCompleteListener(fourthTask ->
                             japaneseRecognizer.process(InputImage.fromBitmap(finalFocused, 0)).addOnCompleteListener(fifthTask -> {
                                 Text fourthText = fourthTask.isSuccessful() ? fourthTask.getResult() : null;
                                 Text fifthText = fifthTask.isSuccessful() ? fifthTask.getResult() : null;
-                                finishMeasurementRecognition(firstText, secondText, thirdText, fourthText, fifthText);
-                                closeMeasurementRecognition(latinRecognizer, japaneseRecognizer, original, enhanced, finalFocused);
+                                latinRecognizer.process(InputImage.fromBitmap(thresholded, 0)).addOnCompleteListener(sixthTask ->
+                                    latinRecognizer.process(InputImage.fromBitmap(inverted, 0)).addOnCompleteListener(seventhTask -> {
+                                        Text sixthText = sixthTask.isSuccessful() ? sixthTask.getResult() : null;
+                                        Text seventhText = seventhTask.isSuccessful() ? seventhTask.getResult() : null;
+                                        finishMeasurementRecognition(firstText, secondText, thirdText, fourthText,
+                                            fifthText, sixthText, seventhText);
+                                        thresholded.recycle();
+                                        inverted.recycle();
+                                        closeMeasurementRecognition(latinRecognizer, japaneseRecognizer, original,
+                                            enhanced, finalFocused);
+                                    }));
                             }));
                     })));
         } catch (Exception error) {
@@ -311,6 +322,55 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
         enhanced.setPixels(pixels, 0, targetWidth, 0, 0, targetWidth, targetHeight);
         if (scaled != source) scaled.recycle();
         return enhanced;
+    }
+
+    private Bitmap thresholdMeasurementBitmap(Bitmap source, boolean invert) {
+        int width = source.getWidth();
+        int height = source.getHeight();
+        int[] pixels = new int[width * height];
+        int[] histogram = new int[256];
+        source.getPixels(pixels, 0, width, 0, 0, width, height);
+        for (int color : pixels) {
+            int gray = Math.round(Color.red(color) * 0.299f + Color.green(color) * 0.587f
+                + Color.blue(color) * 0.114f);
+            histogram[gray]++;
+        }
+
+        long total = pixels.length;
+        long weightedTotal = 0;
+        for (int level = 0; level < histogram.length; level++) weightedTotal += (long) level * histogram[level];
+        long backgroundWeight = 0;
+        long backgroundTotal = 0;
+        double largestVariance = -1;
+        int threshold = 160;
+        for (int level = 0; level < histogram.length; level++) {
+            backgroundWeight += histogram[level];
+            if (backgroundWeight == 0) continue;
+            long foregroundWeight = total - backgroundWeight;
+            if (foregroundWeight == 0) break;
+            backgroundTotal += (long) level * histogram[level];
+            double backgroundMean = backgroundTotal / (double) backgroundWeight;
+            double foregroundMean = (weightedTotal - backgroundTotal) / (double) foregroundWeight;
+            double variance = (double) backgroundWeight * foregroundWeight
+                * (backgroundMean - foregroundMean) * (backgroundMean - foregroundMean);
+            if (variance > largestVariance) {
+                largestVariance = variance;
+                threshold = level;
+            }
+        }
+
+        for (int index = 0; index < pixels.length; index++) {
+            int color = pixels[index];
+            int gray = Math.round(Color.red(color) * 0.299f + Color.green(color) * 0.587f
+                + Color.blue(color) * 0.114f);
+            boolean dark = gray <= threshold;
+            int value = dark ^ invert ? 0 : 255;
+            pixels[index] = Color.rgb(value, value, value);
+        }
+        Bitmap result = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        result.setPixels(pixels, 0, width, 0, 0, width, height);
+        Log.i(TAG, "Measurement threshold=" + threshold + " invert=" + invert);
+        return result;
     }
 
     private Bitmap createFocusedMeasurementBitmap(Bitmap source, Text text) {
