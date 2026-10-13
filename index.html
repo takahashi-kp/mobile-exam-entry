@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#176c6a">
   <title>出張健診 検査項目入力</title>
   <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="stylesheet" href="./styles.css?v=20261005-06">
+  <link rel="stylesheet" href="./styles.css?v=20261013-01">
 </head>
 <body>
   <div class="app-toast" id="appToast" role="status" aria-live="polite"></div>
@@ -285,7 +285,10 @@
           </div>
 
           <div class="section-block" data-group="身体">
-            <h2>身体計測</h2>
+            <div class="exam-section-heading">
+              <h2>身体計測</h2>
+              <button class="ghost measurement-scan-button" id="scanEntryMeasurements" type="button" aria-label="カメラで身長と体重を読み取る" title="身長・体重をカメラで読み取る" hidden><span aria-hidden="true">📷</span></button>
+            </div>
             <div class="form-grid measure-grid">
               <label>
                 <span>身長</span>
@@ -299,6 +302,8 @@
                 <span>腹囲</span>
                 <input class="measure-input" name="腹囲" inputmode="decimal">
               </label>
+              <div class="entry-bmi"><span>BMI</span><output id="entryBmi">--</output></div>
+              <input type="hidden" name="BMI">
             </div>
             <label class="group-note">
               <span>自由入力</span>
@@ -483,7 +488,10 @@
             </section>
 
             <section class="mobile-exam-panel" data-mobile-panel="身体">
-              <h2>身体計測</h2>
+              <div class="exam-section-heading">
+                <h2>身体計測</h2>
+                <button class="ghost measurement-scan-button" id="scanMobileMeasurements" type="button" aria-label="カメラで身長と体重を読み取る" title="身長・体重をカメラで読み取る" hidden><span aria-hidden="true">📷</span></button>
+              </div>
               <div class="mobile-value-grid body-measurements">
                 <label><span>身長 <small>cm</small></span><input data-mobile-field="身長" inputmode="decimal"></label>
                 <label><span>体重 <small>kg</small></span><input data-mobile-field="体重" inputmode="decimal"></label>
@@ -771,6 +779,6 @@
     </section>
   </main>
 
-  <script src="./app.js?v=20261005-09" type="module"></script>
+  <script src="./app.js?v=20261013-01" type="module"></script>
 </body>
 </html>

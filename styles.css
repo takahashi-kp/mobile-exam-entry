@@ -534,6 +534,37 @@ body.native-android-app[data-view="entry"][data-entry-group="診察"] .entry-com
   padding-bottom: 8px;
 }
 
+.exam-section-heading {
+  align-items: center;
+  border-bottom: 2px solid #a5b6b1;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  margin: 4px 0 14px;
+  padding-bottom: 8px;
+}
+
+.exam-section-heading h2,
+.mobile-exam-panel .exam-section-heading h2 {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.measurement-scan-button {
+  flex: 0 0 44px;
+  font-size: 21px;
+  height: 44px;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0;
+  width: 44px;
+}
+
+.measurement-scan-button[hidden] {
+  display: none;
+}
+
 .mobile-value-grid {
   display: grid;
   gap: 10px;
@@ -1770,8 +1801,32 @@ textarea:focus {
 
 .measure-grid {
   column-gap: 12px;
-  grid-template-columns: repeat(3, max-content);
+  grid-template-columns: repeat(4, max-content);
   justify-content: start;
+}
+
+.entry-bmi {
+  display: grid;
+  gap: 4px;
+}
+
+.entry-bmi > span {
+  color: #263d3a;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.entry-bmi output {
+  align-items: center;
+  background: #edf2f0;
+  border: 1px solid #7d918c;
+  border-radius: 5px;
+  display: flex;
+  font-weight: 800;
+  height: 38px;
+  justify-content: center;
+  min-width: 70px;
+  padding: 7px 9px;
 }
 
 .group-note {

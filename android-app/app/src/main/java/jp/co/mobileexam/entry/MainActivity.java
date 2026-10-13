@@ -5,6 +5,7 @@ import android.app.Activity;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.graphics.Rect;
 import android.net.Uri;
 import android.media.AudioManager;
 import android.media.ToneGenerator;
@@ -16,6 +17,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
+import android.provider.MediaStore;
 import android.util.Log;
 import android.webkit.JavascriptInterface;
 import android.webkit.PermissionRequest;
@@ -26,17 +28,30 @@ import android.webkit.WebViewClient;
 import android.webkit.WebResourceRequest;
 import android.window.OnBackInvokedDispatcher;
 
+import androidx.core.content.FileProvider;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 
 import com.google.zxing.integration.android.IntentIntegrator;
 import com.google.zxing.integration.android.IntentResult;
+import com.google.mlkit.vision.common.InputImage;
+import com.google.mlkit.vision.text.Text;
+import com.google.mlkit.vision.text.TextRecognition;
+import com.google.mlkit.vision.text.TextRecognizer;
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.zip.CRC32;
 
 public class MainActivity extends Activity implements NfcAdapter.ReaderCallback {
@@ -46,12 +61,17 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
     private static final int BLOCK_COUNT = 14;
     private static final int SLOT_BLOCKS = 7;
     private static final int MAX_PAYLOAD = 96;
+    private static final int MEASUREMENT_CAMERA_REQUEST = 4201;
+    private static final Pattern DECIMAL_VALUE = Pattern.compile("(?<![0-9])([0-9]{1,3}(?:[.,][0-9])?)(?![0-9])");
+    private static final Pattern HEIGHT_WITH_UNIT = Pattern.compile("([0-9]{1,3}(?:[.,][0-9])?)\\s*c[mn]", Pattern.CASE_INSENSITIVE);
+    private static final Pattern WEIGHT_WITH_UNIT = Pattern.compile("([0-9]{1,3}(?:[.,][0-9])?)\\s*k[gq]", Pattern.CASE_INSENSITIVE);
     private static final byte[] MAGIC = new byte[]{0x4d, 0x45, 0x58, 0x31};
     private WebView webView;
     private NfcAdapter nfcAdapter;
     private volatile Tag currentTag;
     private SharedPreferences bindings;
     private SharedPreferences deviceSettings;
+    private File measurementPhoto;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -123,7 +143,7 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
                 JSONObject body = bodyJson == null || bodyJson.isEmpty() ? new JSONObject() : new JSONObject(bodyJson);
                 switch (path) {
                     case "/capabilities":
-                        return ok().put("barcodeCamera", true).put("nfc", nfcAdapter != null).toString();
+                        return ok().put("barcodeCamera", true).put("measurementCamera", true).put("nfc", nfcAdapter != null).toString();
                     case "/health":
                         if (nfcAdapter == null) throw new Exception("この端末はNFCに対応していません。");
                         if (!nfcAdapter.isEnabled()) throw new Exception("NFCが無効です。端末のNFCを有効にしてください。");
@@ -136,6 +156,7 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
                     case "/feedback/set": return saveFeedbackMode(body.optString("mode")).toString();
                     case "/feedback/play": playCardFeedback(body.optString("outcome")); return ok().toString();
                     case "/barcode/scan": startBarcodeScan(); return ok().put("started", true).toString();
+                    case "/measurement/scan": startMeasurementScan(); return ok().put("started", true).toString();
                     default: throw new Exception("未対応のFeliCa操作です: " + path);
                 }
             } catch (Exception error) { return failure(error).toString(); }
@@ -162,7 +183,30 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
         });
     }
 
+    private void startMeasurementScan() {
+        runOnUiThread(() -> {
+            try {
+                File directory = new File(getCacheDir(), "measurement-photos");
+                if (!directory.exists() && !directory.mkdirs()) throw new Exception("撮影用フォルダを準備できませんでした。");
+                measurementPhoto = File.createTempFile("ad6351-", ".jpg", directory);
+                Uri uri = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", measurementPhoto);
+                Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+                intent.putExtra(MediaStore.EXTRA_OUTPUT, uri);
+                intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                if (intent.resolveActivity(getPackageManager()) == null) throw new Exception("カメラアプリを起動できませんでした。");
+                startActivityForResult(intent, MEASUREMENT_CAMERA_REQUEST);
+            } catch (Exception error) {
+                deleteMeasurementPhoto();
+                dispatchMeasurementError(error.getMessage());
+            }
+        });
+    }
+
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == MEASUREMENT_CAMERA_REQUEST) {
+            if (resultCode == RESULT_OK) recognizeMeasurementPhoto(); else deleteMeasurementPhoto();
+            return;
+        }
         Log.i(TAG, "Scanner result request=" + requestCode + " result=" + resultCode);
         if (data != null && data.hasExtra(RetryBarcodeActivity.EXTRA_CAMERA_ERROR)) {
             dispatchBarcodeEvent("android-barcode-error",
@@ -181,15 +225,135 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
         dispatchBarcodeEvent("android-barcode-scanned", result.getContents(), result.getFormatName());
     }
 
+    private void recognizeMeasurementPhoto() {
+        File photo = measurementPhoto;
+        if (photo == null || !photo.isFile()) {
+            dispatchMeasurementError("撮影画像を読み込めませんでした。");
+            return;
+        }
+        try {
+            InputImage image = InputImage.fromFilePath(this, Uri.fromFile(photo));
+            TextRecognizer recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
+            recognizer.process(image)
+                .addOnSuccessListener(text -> {
+                    try {
+                        Measurement measurement = extractMeasurement(text);
+                        if (measurement == null) {
+                            dispatchMeasurementError("身長と体重を認識できませんでした。表示器全体を正面から撮影してください。");
+                        } else {
+                            JSONObject detail = new JSONObject()
+                                .put("height", formatMeasurement(measurement.height))
+                                .put("weight", formatMeasurement(measurement.weight));
+                            dispatchWebEvent("android-measurement-scanned", detail);
+                        }
+                    } catch (Exception error) {
+                        dispatchMeasurementError(error.getMessage());
+                    } finally {
+                        recognizer.close();
+                        deleteMeasurementPhoto();
+                    }
+                })
+                .addOnFailureListener(error -> {
+                    recognizer.close();
+                    deleteMeasurementPhoto();
+                    dispatchMeasurementError("画像の文字認識に失敗しました。もう一度撮影してください。");
+                });
+        } catch (Exception error) {
+            deleteMeasurementPhoto();
+            dispatchMeasurementError(error.getMessage());
+        }
+    }
+
+    private Measurement extractMeasurement(Text text) {
+        List<NumericCandidate> candidates = new ArrayList<>();
+        Double height = null;
+        Double weight = null;
+        for (Text.TextBlock block : text.getTextBlocks()) {
+            for (Text.Line line : block.getLines()) {
+                String normalized = normalizeOcrText(line.getText());
+                String lower = normalized.toLowerCase(Locale.ROOT);
+                Rect box = line.getBoundingBox();
+                Double unitHeight = firstPatternValue(HEIGHT_WITH_UNIT, normalized);
+                Double unitWeight = firstPatternValue(WEIGHT_WITH_UNIT, normalized);
+                if (unitHeight != null && validHeight(unitHeight)) height = unitHeight;
+                if (unitWeight != null && validWeight(unitWeight)) weight = unitWeight;
+                Matcher matcher = DECIMAL_VALUE.matcher(normalized);
+                while (matcher.find()) {
+                    double value;
+                    try { value = Double.parseDouble(matcher.group(1).replace(',', '.')); }
+                    catch (NumberFormatException ignored) { continue; }
+                    candidates.add(new NumericCandidate(value, box == null ? 0 : box.centerX(), box == null ? 0 : box.centerY()));
+                    if (unitHeight == null && !lower.contains("kg") && normalized.contains("身長") && validHeight(value)) height = value;
+                    if (unitWeight == null && !lower.contains("cm") && normalized.contains("体重") && validWeight(value)) weight = value;
+                }
+            }
+        }
+        candidates.sort(Comparator.comparingInt((NumericCandidate item) -> item.y).thenComparingInt(item -> item.x));
+        if (height == null) {
+            for (NumericCandidate item : candidates) if (validHeight(item.value)) { height = item.value; break; }
+        }
+        if (weight == null) {
+            for (NumericCandidate item : candidates) {
+                if (validWeight(item.value) && (height == null || Math.abs(item.value - height) > 0.01)) { weight = item.value; break; }
+            }
+        }
+        return height != null && weight != null ? new Measurement(height, weight) : null;
+    }
+
+    private String normalizeOcrText(String text) {
+        return text.replace('O', '0').replace('o', '0').replace('I', '1').replace('l', '1')
+            .replace('，', ',').replace('．', '.');
+    }
+
+    private Double firstPatternValue(Pattern pattern, String text) {
+        Matcher matcher = pattern.matcher(text);
+        if (!matcher.find()) return null;
+        try { return Double.parseDouble(matcher.group(1).replace(',', '.')); }
+        catch (NumberFormatException ignored) { return null; }
+    }
+
+    private boolean validHeight(double value) { return value >= 88.0 && value <= 210.0; }
+    private boolean validWeight(double value) { return value >= 2.0 && value <= 150.8; }
+    private String formatMeasurement(double value) { return String.format(Locale.ROOT, "%.1f", value); }
+
+    private void dispatchMeasurementError(String message) {
+        JSONObject detail = new JSONObject();
+        try { detail.put("text", message == null ? "身長と体重を認識できませんでした。" : message); } catch (Exception ignored) { }
+        dispatchWebEvent("android-measurement-error", detail);
+    }
+
+    private void dispatchWebEvent(String eventName, JSONObject detail) {
+        String script = "window.dispatchEvent(new CustomEvent(" + JSONObject.quote(eventName)
+            + ",{detail:" + detail + "}));";
+        runOnUiThread(() -> webView.evaluateJavascript(script, null));
+    }
+
+    private void deleteMeasurementPhoto() {
+        File photo = measurementPhoto;
+        measurementPhoto = null;
+        if (photo != null && photo.exists() && !photo.delete()) Log.w(TAG, "Unable to delete measurement photo");
+    }
+
+    private static final class NumericCandidate {
+        final double value;
+        final int x;
+        final int y;
+        NumericCandidate(double value, int x, int y) { this.value = value; this.x = x; this.y = y; }
+    }
+
+    private static final class Measurement {
+        final double height;
+        final double weight;
+        Measurement(double height, double weight) { this.height = height; this.weight = weight; }
+    }
+
     private void dispatchBarcodeEvent(String eventName, String text, String format) {
         JSONObject detail = new JSONObject();
         try {
             if (text != null) detail.put("text", text);
             if (format != null) detail.put("format", format);
         } catch (Exception ignored) { }
-        String script = "window.dispatchEvent(new CustomEvent(" + JSONObject.quote(eventName)
-            + ",{detail:" + detail + "}));";
-        runOnUiThread(() -> webView.evaluateJavascript(script, null));
+        dispatchWebEvent(eventName, detail);
     }
 
     private String feedbackMode() {

@@ -202,7 +202,7 @@ const PROGRESS_GROUPS = [
   { label: "尿", target: "尿", fields: ["尿蛋白定性", "尿糖定性", "尿潜血", "尿ウロビリノーゲン定性", "ケトン体（アセトン体）", "尿PH", "尿検査_自由入力"] },
   { label: "血圧", target: "血圧", fields: ["1回目最高血圧", "1回目最低血圧", "2回目最高血圧", "2回目最低血圧", "血圧_自由入力"] },
   { label: "脈", target: "脈", fields: ["脈拍", "脈_自由入力"] },
-  { label: "身体", target: "身体", fields: ["身長", "体重", "腹囲", "身体計測_自由入力"] },
+  { label: "身体", target: "身体", fields: ["身長", "体重", "腹囲", "BMI", "身体計測_自由入力"] },
   { label: "聴力", target: "聴力", fields: ["聴力(右)1000Hz", "聴力(左)1000Hz", "聴力(右)4000Hz", "聴力(左)4000Hz", "聴力_自由入力"] },
   { label: "採血", target: "採血", fields: ["採血確認", "採血確認ログ", "採血管バーコード履歴"] },
   { label: "診察", target: "診察", fields: ["巡回診察", "結膜貧血", "甲状腺腫大", "心雑音", "脈の異常", "呼吸音異常", "その他", "その他_自由入力", "巡回診察_自由入力"] }
@@ -318,6 +318,7 @@ const mobilePatientLookup = document.querySelector("#mobilePatientLookup");
 const mobileExamWorkspace = document.querySelector("#mobileExamWorkspace");
 const mobilePatientCode = document.querySelector("#mobilePatientCode");
 const mobileBmi = document.querySelector("#mobileBmi");
+const entryBmi = document.querySelector("#entryBmi");
 const cleanupSummary = document.querySelector("#cleanupSummary");
 const guidanceFields = {
   year: document.querySelector("#guidanceYear"),
@@ -690,6 +691,7 @@ function bindUi() {
   });
   form.addEventListener("change", handleExclusiveCheckboxes);
   form.addEventListener("input", markDirtyFromEvent);
+  form.addEventListener("input", updateEntryBmi);
   form.addEventListener("change", markDirtyFromEvent);
   questionnaireForm?.addEventListener("input", markDirtyFromEvent);
   questionnaireForm?.addEventListener("input", updateSmokingAmountFromEvent);
@@ -705,9 +707,14 @@ function bindUi() {
   window.addEventListener("android-felica-tag", handleAndroidFelicaTag);
   window.addEventListener("android-barcode-scanned", handleAndroidBarcodeScanned);
   window.addEventListener("android-barcode-error", handleAndroidBarcodeError);
+  window.addEventListener("android-measurement-scanned", handleAndroidMeasurementScanned);
+  window.addEventListener("android-measurement-error", handleAndroidMeasurementError);
   window.addEventListener("android-back-request", handleAndroidBackRequest);
   document.querySelectorAll(".barcode-scan-button").forEach((button) => {
     button.addEventListener("click", startNativeBarcodeScan);
+  });
+  document.querySelectorAll(".measurement-scan-button").forEach((button) => {
+    button.addEventListener("click", startNativeMeasurementScan);
   });
   document.querySelector("#lookupReceptionPatient")?.addEventListener("click", lookupReceptionPatient);
   receptionPatientCode?.addEventListener("keydown", (event) => {
@@ -813,6 +820,9 @@ function setupNativeBarcodeScanner() {
   document.querySelectorAll(".barcode-scan-button").forEach((button) => {
     button.hidden = true;
   });
+  document.querySelectorAll(".measurement-scan-button").forEach((button) => {
+    button.hidden = true;
+  });
   if (!available) return;
   try {
     const capabilities = JSON.parse(window.AndroidFelica.request("/capabilities", "{}") || "{}");
@@ -820,9 +830,88 @@ function setupNativeBarcodeScanner() {
     document.querySelectorAll(".barcode-scan-button").forEach((button) => {
       button.hidden = !(capabilities.ok && capabilities.barcodeCamera === true);
     });
+    document.querySelectorAll(".measurement-scan-button").forEach((button) => {
+      button.hidden = !(capabilities.ok && capabilities.measurementCamera === true);
+    });
   } catch {
     // Older Android builds do not contain the native barcode scanner.
   }
+}
+
+async function startNativeMeasurementScan() {
+  try {
+    await felicaRequest("/measurement/scan", { device: "AD-6351" });
+  } catch (error) {
+    toast(error.message || "測定器読取カメラを起動できませんでした。", true);
+  }
+}
+
+function handleAndroidMeasurementError(event) {
+  const detail = String(event.detail?.text || "").trim();
+  toast(detail || "身長と体重を認識できませんでした。もう一度撮影してください。", true);
+}
+
+async function handleAndroidMeasurementScanned(event) {
+  const height = normalizeMeasurementValue(event.detail?.height, 88, 210);
+  const weight = normalizeMeasurementValue(event.detail?.weight, 2, 150.8);
+  if (!height || !weight) {
+    toast("身長と体重を正しく認識できませんでした。もう一度撮影してください。", true);
+    return;
+  }
+
+  if (document.body.dataset.view === "mobile") {
+    if (activeMobileGroup !== "身体") await selectMobileExamGroup("身体");
+    const heightInput = mobileExamForm?.querySelector('[data-mobile-field="身長"]');
+    const weightInput = mobileExamForm?.querySelector('[data-mobile-field="体重"]');
+    if (!confirmMeasurementOverwrite(heightInput?.value, weightInput?.value)) return;
+    heightInput.value = height;
+    weightInput.value = weight;
+    heightInput.dispatchEvent(new Event("input", { bubbles: true }));
+    weightInput.dispatchEvent(new Event("input", { bubbles: true }));
+    toast(`身長 ${height}cm、体重 ${weight}kg、BMI ${calculateBmi(height, weight)}を読み取りました。`);
+    return;
+  }
+
+  if (document.body.dataset.view === "entry") {
+    if (activeEntryGroup !== "身体") await openEntryGroup("身体");
+    const heightInput = form.elements.namedItem("身長");
+    const weightInput = form.elements.namedItem("体重");
+    if (!confirmMeasurementOverwrite(heightInput?.value, weightInput?.value)) return;
+    heightInput.value = height;
+    weightInput.value = weight;
+    heightInput.dispatchEvent(new Event("input", { bubbles: true }));
+    weightInput.dispatchEvent(new Event("input", { bubbles: true }));
+    updateEntryBmi();
+    toast(`身長 ${height}cm、体重 ${weight}kg、BMI ${calculateBmi(height, weight)}を読み取りました。`);
+  }
+}
+
+function normalizeMeasurementValue(value, minimum, maximum) {
+  const number = Number(String(value ?? "").replace(",", "."));
+  return Number.isFinite(number) && number >= minimum && number <= maximum ? number.toFixed(1) : "";
+}
+
+function confirmMeasurementOverwrite(currentHeight, currentWeight) {
+  if (!String(currentHeight || "").trim() && !String(currentWeight || "").trim()) return true;
+  return window.confirm("既存の身長・体重を上書きします。よろしいですか？");
+}
+
+function calculateBmi(heightValue, weightValue) {
+  const height = Number(heightValue);
+  const weight = Number(weightValue);
+  const bmi = height > 0 && weight > 0 ? weight / ((height / 100) ** 2) : NaN;
+  return Number.isFinite(bmi) ? bmi.toFixed(1) : "--";
+}
+
+function updateEntryBmi() {
+  if (!entryBmi) return;
+  const value = calculateBmi(
+    form.elements.namedItem("身長")?.value,
+    form.elements.namedItem("体重")?.value
+  );
+  entryBmi.textContent = value;
+  const bmiField = form.elements.namedItem("BMI");
+  if (bmiField) bmiField.value = value === "--" ? "" : value;
 }
 
 async function startNativeBarcodeScan(event) {
@@ -1946,10 +2035,7 @@ function getMobileFieldValue(fieldKey) {
 
 function updateMobileBmi() {
   if (!mobileBmi) return;
-  const height = Number(getMobileFieldValue("身長"));
-  const weight = Number(getMobileFieldValue("体重"));
-  const bmi = height > 0 && weight > 0 ? weight / ((height / 100) ** 2) : NaN;
-  mobileBmi.textContent = Number.isFinite(bmi) ? bmi.toFixed(1) : "--";
+  mobileBmi.textContent = calculateBmi(getMobileFieldValue("身長"), getMobileFieldValue("体重"));
 }
 
 function renderMobileResultValues() {
@@ -1988,6 +2074,7 @@ async function confirmMobileExam() {
       setEntryFormFieldValue(fieldName, value);
     });
   });
+  if (activeMobileGroup === "身体") updateEntryBmi();
   if (activeMobileGroup === "保健指導") updateEntryGuidanceSelection();
   const saved = await saveRecordData(formToRecord(), {
     silent: true,
@@ -3215,6 +3302,7 @@ function clearEntryRecordForm() {
   if (diagnosisReference) diagnosisReference.innerHTML = "";
   const verificationPanel = document.querySelector("#entryVerificationActions");
   if (verificationPanel) verificationPanel.hidden = true;
+  updateEntryBmi();
   updateEntryGuidanceSelection();
 }
 
@@ -3404,6 +3492,7 @@ function applyEntryRecordToForm(data, options = {}) {
     }
   });
   renderBloodConfirmationLog();
+  updateEntryBmi();
   updateEntryGuidanceSelection();
 }
 
