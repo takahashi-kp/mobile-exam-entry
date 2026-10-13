@@ -854,9 +854,15 @@ function handleAndroidMeasurementError(event) {
 async function handleAndroidMeasurementScanned(event) {
   let height = normalizeMeasurementValue(event.detail?.height, 88, 210);
   let weight = normalizeMeasurementValue(event.detail?.weight, 2, 150.8);
+  const candidates = Array.isArray(event.detail?.candidates)
+    ? event.detail.candidates.filter(Boolean).slice(0, 4)
+    : [];
+  const candidateMessage = candidates.length
+    ? `\nOCR候補: ${candidates.join("、")}`
+    : "";
 
   const corrected = window.prompt(
-    `${event.detail?.requiresReview ? "一部を認識できませんでした。" : "認識結果を確認してください。"}\n必要なら修正して［OK］を押してください。\n身長(cm),体重(kg)`,
+    `${event.detail?.requiresReview ? "認識結果が一致しませんでした。" : "認識結果を確認してください。"}${candidateMessage}\n表示器を見て確認・修正し［OK］を押してください。\n身長(cm),体重(kg)`,
     `${height},${weight}`
   );
   if (corrected === null) return;

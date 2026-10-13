@@ -407,39 +407,61 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
     private void finishMeasurementRecognition(Text... recognizedTexts) {
         try {
             List<Measurement> measurements = new ArrayList<>();
-            StringBuilder recognized = new StringBuilder();
+            List<Measurement> trustedMeasurements = new ArrayList<>();
             for (int index = 0; index < recognizedTexts.length; index++) {
                 Text text = recognizedTexts[index];
                 String summary = summarizeRecognizedText(text == null ? "" : text.getText());
                 Log.i(TAG, "Measurement OCR pass" + (index + 1) + "=" + summary);
-                if (!summary.isEmpty()) recognized.append(' ').append(summary);
                 Measurement candidate = text == null ? null : extractMeasurement(text);
-                if (candidate != null) measurements.add(candidate);
-            }
-            Measurement measurement = measurements.isEmpty() ? null : measurements.get(0);
-            for (Measurement candidate : measurements) {
-                if (!sameMeasurement(measurement, candidate)) {
-                    dispatchMeasurementError("認識結果が一致しません。候補: 身長 " + formatMeasurement(measurement.height)
-                        + "cm・体重 " + formatMeasurement(measurement.weight) + "kg / 身長 " + formatMeasurement(candidate.height)
-                        + "cm・体重 " + formatMeasurement(candidate.weight) + "kg。表示器を正面から再撮影してください。");
-                    return;
+                if (candidate != null) {
+                    measurements.add(candidate);
+                    // The last two passes are thresholded variants. They are useful hints, but a
+                    // single result from them is too easy to mistake for a valid seven-segment value.
+                    if (index < 5) trustedMeasurements.add(candidate);
                 }
             }
-            if (measurement == null) {
-                PartialMeasurement partial = extractPartialMeasurement(recognizedTexts);
-                JSONObject detail = new JSONObject().put("requiresReview", true);
-                if (partial.height != null) detail.put("height", formatMeasurement(partial.height));
-                if (partial.weight != null) detail.put("weight", formatMeasurement(partial.weight));
+
+            Measurement measurement = findRepeatedMeasurement(trustedMeasurements);
+            if (measurement != null) {
+                JSONObject detail = new JSONObject()
+                    .put("height", formatMeasurement(measurement.height))
+                    .put("weight", formatMeasurement(measurement.weight));
                 dispatchWebEvent("android-measurement-scanned", detail);
                 return;
             }
-            JSONObject detail = new JSONObject()
-                .put("height", formatMeasurement(measurement.height))
-                .put("weight", formatMeasurement(measurement.weight));
+
+            int trustedCount = Math.min(5, recognizedTexts.length);
+            PartialMeasurement partial = extractPartialMeasurement(
+                Arrays.copyOfRange(recognizedTexts, 0, trustedCount));
+            JSONObject detail = new JSONObject().put("requiresReview", true);
+            if (partial.height != null) detail.put("height", formatMeasurement(partial.height));
+            if (partial.weight != null) detail.put("weight", formatMeasurement(partial.weight));
+            JSONArray candidates = new JSONArray();
+            List<String> uniqueCandidates = new ArrayList<>();
+            for (Measurement candidate : measurements) {
+                String label = formatMeasurement(candidate.height) + "cm / "
+                    + formatMeasurement(candidate.weight) + "kg";
+                if (!uniqueCandidates.contains(label)) {
+                    uniqueCandidates.add(label);
+                    candidates.put(label);
+                }
+            }
+            detail.put("candidates", candidates);
             dispatchWebEvent("android-measurement-scanned", detail);
         } catch (Exception error) {
             dispatchMeasurementError(error.getMessage());
         }
+    }
+
+    private Measurement findRepeatedMeasurement(List<Measurement> measurements) {
+        for (int first = 0; first < measurements.size(); first++) {
+            int matches = 1;
+            for (int second = first + 1; second < measurements.size(); second++) {
+                if (sameMeasurement(measurements.get(first), measurements.get(second))) matches++;
+            }
+            if (matches >= 2) return measurements.get(first);
+        }
+        return null;
     }
 
     private PartialMeasurement extractPartialMeasurement(Text... recognizedTexts) {
