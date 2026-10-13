@@ -246,8 +246,21 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
                         Text firstText = firstTask.isSuccessful() ? firstTask.getResult() : null;
                         Text secondText = secondTask.isSuccessful() ? secondTask.getResult() : null;
                         Text thirdText = thirdTask.isSuccessful() ? thirdTask.getResult() : null;
-                        finishMeasurementRecognition(firstText, secondText, thirdText);
-                        closeMeasurementRecognition(latinRecognizer, japaneseRecognizer, original, enhanced);
+                        Bitmap focused = createFocusedMeasurementBitmap(enhanced, secondText);
+                        if (focused == null) focused = createFocusedMeasurementBitmap(original, thirdText);
+                        if (focused == null) {
+                            finishMeasurementRecognition(firstText, secondText, thirdText);
+                            closeMeasurementRecognition(latinRecognizer, japaneseRecognizer, original, enhanced, null);
+                            return;
+                        }
+                        Bitmap finalFocused = focused;
+                        latinRecognizer.process(InputImage.fromBitmap(finalFocused, 0)).addOnCompleteListener(fourthTask ->
+                            japaneseRecognizer.process(InputImage.fromBitmap(finalFocused, 0)).addOnCompleteListener(fifthTask -> {
+                                Text fourthText = fourthTask.isSuccessful() ? fourthTask.getResult() : null;
+                                Text fifthText = fifthTask.isSuccessful() ? fifthTask.getResult() : null;
+                                finishMeasurementRecognition(firstText, secondText, thirdText, fourthText, fifthText);
+                                closeMeasurementRecognition(latinRecognizer, japaneseRecognizer, original, enhanced, finalFocused);
+                            }));
                     })));
         } catch (Exception error) {
             deleteMeasurementPhoto();
@@ -300,18 +313,49 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
         return enhanced;
     }
 
-    private void finishMeasurementRecognition(Text firstText, Text secondText, Text thirdText) {
+    private Bitmap createFocusedMeasurementBitmap(Bitmap source, Text text) {
+        if (text == null) return null;
+        Rect centimeter = null;
+        Rect kilogram = null;
+        for (Text.TextBlock block : text.getTextBlocks()) {
+            for (Text.Line line : block.getLines()) {
+                Rect box = line.getBoundingBox();
+                if (box == null) continue;
+                String normalized = normalizeOcrText(line.getText()).toLowerCase(Locale.ROOT).replace(" ", "");
+                if (normalized.contains("cm")) centimeter = box;
+                if (normalized.contains("kg") || normalized.contains("k9") || normalized.contains("kq")) kilogram = box;
+            }
+        }
+        if (centimeter == null || kilogram == null) return null;
+        int rowGap = Math.abs(kilogram.centerY() - centimeter.centerY());
+        if (rowGap < 20) return null;
+        int left = Math.max(0, Math.min(centimeter.left, kilogram.left) - Math.round(rowGap * 2.8f));
+        int right = Math.min(source.getWidth(), Math.max(centimeter.right, kilogram.right) + Math.round(rowGap * 0.35f));
+        int top = Math.max(0, Math.min(centimeter.top, kilogram.top) - Math.round(rowGap * 0.7f));
+        int bottom = Math.min(source.getHeight(), Math.max(centimeter.bottom, kilogram.bottom) + Math.round(rowGap * 0.7f));
+        if (right - left < 80 || bottom - top < 80) return null;
+        Bitmap crop = Bitmap.createBitmap(source, left, top, right - left, bottom - top);
+        int targetWidth = Math.max(1200, Math.min(2000, crop.getWidth() * 2));
+        int targetHeight = Math.max(1, Math.round(crop.getHeight() * (targetWidth / (float) crop.getWidth())));
+        Bitmap focused = Bitmap.createScaledBitmap(crop, targetWidth, targetHeight, true);
+        if (focused != crop) crop.recycle();
+        Log.i(TAG, "Measurement focus crop=" + left + "," + top + "-" + right + "," + bottom
+            + " scaled=" + targetWidth + "x" + targetHeight);
+        return focused;
+    }
+
+    private void finishMeasurementRecognition(Text... recognizedTexts) {
         try {
-            Measurement first = firstText == null ? null : extractMeasurement(firstText);
-            Measurement second = secondText == null ? null : extractMeasurement(secondText);
-            Measurement third = thirdText == null ? null : extractMeasurement(thirdText);
-            Log.i(TAG, "Measurement OCR original=" + summarizeRecognizedText(firstText == null ? "" : firstText.getText())
-                + " enhanced=" + summarizeRecognizedText(secondText == null ? "" : secondText.getText())
-                + " japanese=" + summarizeRecognizedText(thirdText == null ? "" : thirdText.getText()));
             List<Measurement> measurements = new ArrayList<>();
-            if (first != null) measurements.add(first);
-            if (second != null) measurements.add(second);
-            if (third != null) measurements.add(third);
+            StringBuilder recognized = new StringBuilder();
+            for (int index = 0; index < recognizedTexts.length; index++) {
+                Text text = recognizedTexts[index];
+                String summary = summarizeRecognizedText(text == null ? "" : text.getText());
+                Log.i(TAG, "Measurement OCR pass" + (index + 1) + "=" + summary);
+                if (!summary.isEmpty()) recognized.append(' ').append(summary);
+                Measurement candidate = text == null ? null : extractMeasurement(text);
+                if (candidate != null) measurements.add(candidate);
+            }
             Measurement measurement = measurements.isEmpty() ? null : measurements.get(0);
             for (Measurement candidate : measurements) {
                 if (!sameMeasurement(measurement, candidate)) {
@@ -322,11 +366,9 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
                 }
             }
             if (measurement == null) {
-                String recognized = summarizeRecognizedText((firstText == null ? "" : firstText.getText()) + " "
-                    + (secondText == null ? "" : secondText.getText()) + " "
-                    + (thirdText == null ? "" : thirdText.getText()));
+                String summary = summarizeRecognizedText(recognized.toString());
                 dispatchMeasurementError("身長と体重を認識できませんでした。表示器全体を正面から撮影してください。"
-                    + (recognized.isEmpty() ? "" : " 認識文字: " + recognized));
+                    + (summary.isEmpty() ? "" : " 認識文字: " + summary));
                 return;
             }
             JSONObject detail = new JSONObject()
@@ -343,11 +385,12 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
     }
 
     private void closeMeasurementRecognition(TextRecognizer latinRecognizer, TextRecognizer japaneseRecognizer,
-                                              Bitmap original, Bitmap enhanced) {
+                                              Bitmap original, Bitmap enhanced, Bitmap focused) {
         latinRecognizer.close();
         japaneseRecognizer.close();
         if (!original.isRecycled()) original.recycle();
         if (!enhanced.isRecycled()) enhanced.recycle();
+        if (focused != null && !focused.isRecycled()) focused.recycle();
         deleteMeasurementPhoto();
     }
 
