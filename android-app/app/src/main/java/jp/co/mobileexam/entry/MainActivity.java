@@ -8,6 +8,7 @@ import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
+import android.graphics.Matrix;
 import android.graphics.Rect;
 import android.net.Uri;
 import android.media.AudioManager;
@@ -32,6 +33,7 @@ import android.webkit.WebResourceRequest;
 import android.window.OnBackInvokedDispatcher;
 
 import androidx.core.content.FileProvider;
+import androidx.exifinterface.media.ExifInterface;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -232,7 +234,7 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
             return;
         }
         try {
-            Bitmap original = BitmapFactory.decodeFile(photo.getAbsolutePath());
+            Bitmap original = decodeOrientedBitmap(photo);
             if (original == null) throw new Exception("撮影画像を読み込めませんでした。");
             Bitmap enhanced = enhanceMeasurementBitmap(original);
             TextRecognizer recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
@@ -251,6 +253,33 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
             deleteMeasurementPhoto();
             dispatchMeasurementError(error.getMessage());
         }
+    }
+
+    private Bitmap decodeOrientedBitmap(File photo) throws Exception {
+        Bitmap decoded = BitmapFactory.decodeFile(photo.getAbsolutePath());
+        if (decoded == null) return null;
+        int orientation = new ExifInterface(photo).getAttributeInt(
+            ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL);
+        Matrix matrix = new Matrix();
+        switch (orientation) {
+            case ExifInterface.ORIENTATION_ROTATE_90: matrix.postRotate(90); break;
+            case ExifInterface.ORIENTATION_ROTATE_180: matrix.postRotate(180); break;
+            case ExifInterface.ORIENTATION_ROTATE_270: matrix.postRotate(270); break;
+            case ExifInterface.ORIENTATION_FLIP_HORIZONTAL: matrix.preScale(-1, 1); break;
+            case ExifInterface.ORIENTATION_FLIP_VERTICAL: matrix.preScale(1, -1); break;
+            case ExifInterface.ORIENTATION_TRANSPOSE:
+                matrix.preScale(-1, 1);
+                matrix.postRotate(270);
+                break;
+            case ExifInterface.ORIENTATION_TRANSVERSE:
+                matrix.preScale(-1, 1);
+                matrix.postRotate(90);
+                break;
+            default: return decoded;
+        }
+        Bitmap oriented = Bitmap.createBitmap(decoded, 0, 0, decoded.getWidth(), decoded.getHeight(), matrix, true);
+        if (oriented != decoded) decoded.recycle();
+        return oriented;
     }
 
     private Bitmap enhanceMeasurementBitmap(Bitmap source) {
