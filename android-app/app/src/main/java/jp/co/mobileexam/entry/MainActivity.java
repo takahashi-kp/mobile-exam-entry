@@ -366,9 +366,11 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
                 }
             }
             if (measurement == null) {
-                String summary = summarizeRecognizedText(recognized.toString());
-                dispatchMeasurementError("身長と体重を認識できませんでした。表示器全体を正面から撮影してください。"
-                    + (summary.isEmpty() ? "" : " 認識文字: " + summary));
+                PartialMeasurement partial = extractPartialMeasurement(recognizedTexts);
+                JSONObject detail = new JSONObject().put("requiresReview", true);
+                if (partial.height != null) detail.put("height", formatMeasurement(partial.height));
+                if (partial.weight != null) detail.put("weight", formatMeasurement(partial.weight));
+                dispatchWebEvent("android-measurement-scanned", detail);
                 return;
             }
             JSONObject detail = new JSONObject()
@@ -378,6 +380,39 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
         } catch (Exception error) {
             dispatchMeasurementError(error.getMessage());
         }
+    }
+
+    private PartialMeasurement extractPartialMeasurement(Text... recognizedTexts) {
+        Double height = null;
+        Double weight = null;
+        int heightBox = -1;
+        int weightBox = -1;
+        for (Text text : recognizedTexts) {
+            if (text == null) continue;
+            for (Text.TextBlock block : text.getTextBlocks()) {
+                for (Text.Line line : block.getLines()) {
+                    String normalized = normalizeOcrText(line.getText());
+                    String lower = normalized.toLowerCase(Locale.ROOT).replace(" ", "");
+                    Rect box = line.getBoundingBox();
+                    int boxHeight = box == null ? 0 : box.height();
+                    Matcher matcher = DECIMAL_VALUE.matcher(normalized);
+                    while (matcher.find()) {
+                        double raw;
+                        try { raw = Double.parseDouble(matcher.group(1).replace(',', '.')); }
+                        catch (NumberFormatException ignored) { continue; }
+                        if (lower.contains("cm") && boxHeight > heightBox) {
+                            Double value = normalizeHeightValue(raw);
+                            if (value != null) { height = value; heightBox = boxHeight; }
+                        }
+                        if ((lower.contains("kg") || lower.contains("k9") || lower.contains("kq")) && boxHeight > weightBox) {
+                            Double value = normalizeWeightValue(raw);
+                            if (value != null) { weight = value; weightBox = boxHeight; }
+                        }
+                    }
+                }
+            }
+        }
+        return new PartialMeasurement(height, weight);
     }
 
     private boolean sameMeasurement(Measurement first, Measurement second) {
@@ -513,6 +548,12 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
         final double height;
         final double weight;
         Measurement(double height, double weight) { this.height = height; this.weight = weight; }
+    }
+
+    private static final class PartialMeasurement {
+        final Double height;
+        final Double weight;
+        PartialMeasurement(Double height, Double weight) { this.height = height; this.weight = weight; }
     }
 
     private void dispatchBarcodeEvent(String eventName, String text, String format) {
