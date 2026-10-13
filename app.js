@@ -859,6 +859,9 @@ async function handleAndroidMeasurementScanned(event) {
     return;
   }
 
+  const bmi = calculateBmi(height, weight);
+  if (!window.confirm(`認識結果を反映しますか？\n身長 ${height}cm\n体重 ${weight}kg\nBMI ${bmi}`)) return;
+
   if (document.body.dataset.view === "mobile") {
     if (activeMobileGroup !== "身体") await selectMobileExamGroup("身体");
     const heightInput = mobileExamForm?.querySelector('[data-mobile-field="身長"]');
@@ -868,7 +871,7 @@ async function handleAndroidMeasurementScanned(event) {
     weightInput.value = weight;
     heightInput.dispatchEvent(new Event("input", { bubbles: true }));
     weightInput.dispatchEvent(new Event("input", { bubbles: true }));
-    toast(`身長 ${height}cm、体重 ${weight}kg、BMI ${calculateBmi(height, weight)}を読み取りました。`);
+    toast(`身長 ${height}cm、体重 ${weight}kg、BMI ${bmi}を読み取りました。`);
     return;
   }
 
@@ -882,7 +885,7 @@ async function handleAndroidMeasurementScanned(event) {
     heightInput.dispatchEvent(new Event("input", { bubbles: true }));
     weightInput.dispatchEvent(new Event("input", { bubbles: true }));
     updateEntryBmi();
-    toast(`身長 ${height}cm、体重 ${weight}kg、BMI ${calculateBmi(height, weight)}を読み取りました。`);
+    toast(`身長 ${height}cm、体重 ${weight}kg、BMI ${bmi}を読み取りました。`);
   }
 }
 

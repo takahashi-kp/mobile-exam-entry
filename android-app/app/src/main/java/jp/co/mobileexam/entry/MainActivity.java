@@ -5,6 +5,9 @@ import android.app.Activity;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Color;
 import android.graphics.Rect;
 import android.net.Uri;
 import android.media.AudioManager;
@@ -231,38 +234,83 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
             return;
         }
         try {
-            InputImage image = InputImage.fromFilePath(this, Uri.fromFile(photo));
+            Bitmap original = BitmapFactory.decodeFile(photo.getAbsolutePath());
+            if (original == null) throw new Exception("撮影画像を読み込めませんでした。");
+            Bitmap enhanced = enhanceMeasurementBitmap(original);
             TextRecognizer recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
-            recognizer.process(image)
-                .addOnSuccessListener(text -> {
-                    try {
-                        Measurement measurement = extractMeasurement(text);
-                        if (measurement == null) {
-                            String recognized = summarizeRecognizedText(text.getText());
-                            dispatchMeasurementError("身長と体重を認識できませんでした。表示器全体を正面から撮影してください。"
-                                + (recognized.isEmpty() ? "" : " 認識文字: " + recognized));
-                        } else {
-                            JSONObject detail = new JSONObject()
-                                .put("height", formatMeasurement(measurement.height))
-                                .put("weight", formatMeasurement(measurement.weight));
-                            dispatchWebEvent("android-measurement-scanned", detail);
-                        }
-                    } catch (Exception error) {
-                        dispatchMeasurementError(error.getMessage());
-                    } finally {
-                        recognizer.close();
-                        deleteMeasurementPhoto();
-                    }
-                })
+            recognizer.process(InputImage.fromBitmap(original, 0))
+                .addOnSuccessListener(firstText -> recognizer.process(InputImage.fromBitmap(enhanced, 0))
+                    .addOnSuccessListener(secondText -> finishMeasurementRecognition(firstText, secondText))
+                    .addOnFailureListener(error -> finishMeasurementRecognition(firstText, null))
+                    .addOnCompleteListener(task -> closeMeasurementRecognition(recognizer, original, enhanced)))
                 .addOnFailureListener(error -> {
-                    recognizer.close();
-                    deleteMeasurementPhoto();
-                    dispatchMeasurementError("画像の文字認識に失敗しました。もう一度撮影してください。");
+                    recognizer.process(InputImage.fromBitmap(enhanced, 0))
+                        .addOnSuccessListener(secondText -> finishMeasurementRecognition(null, secondText))
+                        .addOnFailureListener(secondError -> dispatchMeasurementError("画像の文字認識に失敗しました。もう一度撮影してください。"))
+                        .addOnCompleteListener(task -> closeMeasurementRecognition(recognizer, original, enhanced));
                 });
         } catch (Exception error) {
             deleteMeasurementPhoto();
             dispatchMeasurementError(error.getMessage());
         }
+    }
+
+    private Bitmap enhanceMeasurementBitmap(Bitmap source) {
+        int targetWidth = Math.min(source.getWidth(), 1600);
+        int targetHeight = Math.max(1, Math.round(source.getHeight() * (targetWidth / (float) source.getWidth())));
+        Bitmap scaled = Bitmap.createScaledBitmap(source, targetWidth, targetHeight, true);
+        Bitmap enhanced = Bitmap.createBitmap(targetWidth, targetHeight, Bitmap.Config.ARGB_8888);
+        int[] pixels = new int[targetWidth * targetHeight];
+        scaled.getPixels(pixels, 0, targetWidth, 0, 0, targetWidth, targetHeight);
+        for (int index = 0; index < pixels.length; index++) {
+            int color = pixels[index];
+            int gray = Math.round(Color.red(color) * 0.299f + Color.green(color) * 0.587f + Color.blue(color) * 0.114f);
+            gray = Math.max(0, Math.min(255, Math.round((gray - 128) * 1.8f + 128)));
+            pixels[index] = Color.rgb(gray, gray, gray);
+        }
+        enhanced.setPixels(pixels, 0, targetWidth, 0, 0, targetWidth, targetHeight);
+        if (scaled != source) scaled.recycle();
+        return enhanced;
+    }
+
+    private void finishMeasurementRecognition(Text firstText, Text secondText) {
+        try {
+            Measurement first = firstText == null ? null : extractMeasurement(firstText);
+            Measurement second = secondText == null ? null : extractMeasurement(secondText);
+            Log.i(TAG, "Measurement OCR original=" + summarizeRecognizedText(firstText == null ? "" : firstText.getText())
+                + " enhanced=" + summarizeRecognizedText(secondText == null ? "" : secondText.getText()));
+            if (first != null && second != null && !sameMeasurement(first, second)) {
+                dispatchMeasurementError("認識結果が一致しません。候補: 身長 " + formatMeasurement(first.height)
+                    + "cm・体重 " + formatMeasurement(first.weight) + "kg / 身長 " + formatMeasurement(second.height)
+                    + "cm・体重 " + formatMeasurement(second.weight) + "kg。表示器を正面から再撮影してください。");
+                return;
+            }
+            Measurement measurement = first != null ? first : second;
+            if (measurement == null) {
+                String recognized = summarizeRecognizedText((firstText == null ? "" : firstText.getText()) + " "
+                    + (secondText == null ? "" : secondText.getText()));
+                dispatchMeasurementError("身長と体重を認識できませんでした。表示器全体を正面から撮影してください。"
+                    + (recognized.isEmpty() ? "" : " 認識文字: " + recognized));
+                return;
+            }
+            JSONObject detail = new JSONObject()
+                .put("height", formatMeasurement(measurement.height))
+                .put("weight", formatMeasurement(measurement.weight));
+            dispatchWebEvent("android-measurement-scanned", detail);
+        } catch (Exception error) {
+            dispatchMeasurementError(error.getMessage());
+        }
+    }
+
+    private boolean sameMeasurement(Measurement first, Measurement second) {
+        return Math.abs(first.height - second.height) < 0.05 && Math.abs(first.weight - second.weight) < 0.05;
+    }
+
+    private void closeMeasurementRecognition(TextRecognizer recognizer, Bitmap original, Bitmap enhanced) {
+        recognizer.close();
+        if (!original.isRecycled()) original.recycle();
+        if (!enhanced.isRecycled()) enhanced.recycle();
+        deleteMeasurementPhoto();
     }
 
     private Measurement extractMeasurement(Text text) {
