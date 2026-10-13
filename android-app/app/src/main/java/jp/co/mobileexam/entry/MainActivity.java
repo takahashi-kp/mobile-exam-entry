@@ -193,7 +193,6 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
                 Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
                 intent.putExtra(MediaStore.EXTRA_OUTPUT, uri);
                 intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                if (intent.resolveActivity(getPackageManager()) == null) throw new Exception("カメラアプリを起動できませんでした。");
                 startActivityForResult(intent, MEASUREMENT_CAMERA_REQUEST);
             } catch (Exception error) {
                 deleteMeasurementPhoto();
