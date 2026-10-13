@@ -66,8 +66,6 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
     private static final int MAX_PAYLOAD = 96;
     private static final int MEASUREMENT_CAMERA_REQUEST = 4201;
     private static final Pattern DECIMAL_VALUE = Pattern.compile("(?<![0-9])([0-9]{1,4}(?:[.,][0-9])?)(?![0-9])");
-    private static final Pattern HEIGHT_WITH_UNIT = Pattern.compile("([0-9]{1,4}(?:[.,][0-9])?)\\s*c[mn]", Pattern.CASE_INSENSITIVE);
-    private static final Pattern WEIGHT_WITH_UNIT = Pattern.compile("([0-9]{1,4}(?:[.,][0-9])?)\\s*k[gq]", Pattern.CASE_INSENSITIVE);
     private static final byte[] MAGIC = new byte[]{0x4d, 0x45, 0x58, 0x31};
     private WebView webView;
     private NfcAdapter nfcAdapter;
@@ -315,46 +313,54 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
 
     private Measurement extractMeasurement(Text text) {
         List<NumericCandidate> candidates = new ArrayList<>();
-        Double height = null;
-        Double weight = null;
         for (Text.TextBlock block : text.getTextBlocks()) {
             for (Text.Line line : block.getLines()) {
                 String normalized = normalizeOcrText(line.getText());
-                String lower = normalized.toLowerCase(Locale.ROOT);
                 Rect box = line.getBoundingBox();
-                Double unitHeight = firstPatternValue(HEIGHT_WITH_UNIT, normalized);
-                Double unitWeight = firstPatternValue(WEIGHT_WITH_UNIT, normalized);
-                unitHeight = normalizeHeightValue(unitHeight);
-                unitWeight = normalizeWeightValue(unitWeight);
-                if (unitHeight != null) height = unitHeight;
-                if (unitWeight != null) weight = unitWeight;
                 Matcher matcher = DECIMAL_VALUE.matcher(normalized);
                 while (matcher.find()) {
                     double value;
                     try { value = Double.parseDouble(matcher.group(1).replace(',', '.')); }
                     catch (NumberFormatException ignored) { continue; }
-                    candidates.add(new NumericCandidate(value, box == null ? 0 : box.centerX(), box == null ? 0 : box.centerY()));
-                    Double heightValue = normalizeHeightValue(value);
-                    Double weightValue = normalizeWeightValue(value);
-                    if (unitHeight == null && !lower.contains("kg") && normalized.contains("身長") && heightValue != null) height = heightValue;
-                    if (unitWeight == null && !lower.contains("cm") && normalized.contains("体重") && weightValue != null) weight = weightValue;
+                    candidates.add(new NumericCandidate(value,
+                        box == null ? 0 : box.centerX(), box == null ? 0 : box.centerY(),
+                        box == null ? 0 : box.height()));
                 }
             }
         }
-        candidates.sort(Comparator.comparingInt((NumericCandidate item) -> item.y).thenComparingInt(item -> item.x));
-        if (height == null) {
-            for (NumericCandidate item : candidates) {
-                Double value = normalizeHeightValue(item.value);
-                if (value != null) { height = value; break; }
+        if (candidates.isEmpty()) return null;
+
+        int largestTextHeight = candidates.stream().mapToInt(item -> item.boxHeight).max().orElse(0);
+        int minimumDisplayHeight = Math.max(12, Math.round(largestTextHeight * 0.55f));
+        List<NumericCandidate> display = new ArrayList<>();
+        for (NumericCandidate candidate : candidates) {
+            if (candidate.boxHeight >= minimumDisplayHeight) display.add(candidate);
+        }
+        display.sort(Comparator.comparingInt((NumericCandidate item) -> item.y).thenComparingInt(item -> item.x));
+
+        NumericCandidate heightCandidate = null;
+        Double height = null;
+        for (NumericCandidate item : display) {
+            Double value = normalizeHeightValue(item.value);
+            if (value != null) {
+                heightCandidate = item;
+                height = value;
+                break;
             }
         }
-        if (weight == null) {
-            for (NumericCandidate item : candidates) {
-                Double value = normalizeWeightValue(item.value);
-                if (value != null && (height == null || Math.abs(value - height) > 0.01)) { weight = value; break; }
+        if (heightCandidate == null) return null;
+
+        Double weight = null;
+        int separateRowDistance = Math.max(8, Math.round(largestTextHeight * 0.35f));
+        for (NumericCandidate item : display) {
+            if (item.y <= heightCandidate.y + separateRowDistance) continue;
+            Double value = normalizeWeightValue(item.value);
+            if (value != null) {
+                weight = value;
+                break;
             }
         }
-        return height != null && weight != null ? new Measurement(height, weight) : null;
+        return weight == null ? null : new Measurement(height, weight);
     }
 
     private String normalizeOcrText(String text) {
@@ -385,13 +391,6 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
         return summary.length() <= 80 ? summary : summary.substring(0, 80) + "...";
     }
 
-    private Double firstPatternValue(Pattern pattern, String text) {
-        Matcher matcher = pattern.matcher(text);
-        if (!matcher.find()) return null;
-        try { return Double.parseDouble(matcher.group(1).replace(',', '.')); }
-        catch (NumberFormatException ignored) { return null; }
-    }
-
     private boolean validHeight(double value) { return value >= 88.0 && value <= 210.0; }
     private boolean validWeight(double value) { return value >= 2.0 && value <= 150.8; }
     private String formatMeasurement(double value) { return String.format(Locale.ROOT, "%.1f", value); }
@@ -418,7 +417,13 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
         final double value;
         final int x;
         final int y;
-        NumericCandidate(double value, int x, int y) { this.value = value; this.x = x; this.y = y; }
+        final int boxHeight;
+        NumericCandidate(double value, int x, int y, int boxHeight) {
+            this.value = value;
+            this.x = x;
+            this.y = y;
+            this.boxHeight = boxHeight;
+        }
     }
 
     private static final class Measurement {

@@ -852,15 +852,30 @@ function handleAndroidMeasurementError(event) {
 }
 
 async function handleAndroidMeasurementScanned(event) {
-  const height = normalizeMeasurementValue(event.detail?.height, 88, 210);
-  const weight = normalizeMeasurementValue(event.detail?.weight, 2, 150.8);
+  let height = normalizeMeasurementValue(event.detail?.height, 88, 210);
+  let weight = normalizeMeasurementValue(event.detail?.weight, 2, 150.8);
   if (!height || !weight) {
     toast("身長と体重を正しく認識できませんでした。もう一度撮影してください。", true);
     return;
   }
 
+  const corrected = window.prompt(
+    "認識結果を確認してください。必要なら修正して［OK］を押してください。\n身長(cm),体重(kg)",
+    `${height},${weight}`
+  );
+  if (corrected === null) return;
+  const [correctedHeight, correctedWeight, ...extra] = corrected.split(/[,，]/).map((value) => value.trim());
+  if (extra.length || !correctedHeight || !correctedWeight) {
+    toast("身長と体重を『170.0,66.5』の形式で入力してください。", true);
+    return;
+  }
+  height = normalizeMeasurementValue(correctedHeight, 88, 210);
+  weight = normalizeMeasurementValue(correctedWeight, 2, 150.8);
+  if (!height || !weight) {
+    toast("身長または体重が入力範囲外です。", true);
+    return;
+  }
   const bmi = calculateBmi(height, weight);
-  if (!window.confirm(`認識結果を反映しますか？\n身長 ${height}cm\n体重 ${weight}kg\nBMI ${bmi}`)) return;
 
   if (document.body.dataset.view === "mobile") {
     if (activeMobileGroup !== "身体") await selectMobileExamGroup("身体");
