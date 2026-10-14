@@ -249,42 +249,96 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
                         Text firstText = firstTask.isSuccessful() ? firstTask.getResult() : null;
                         Text secondText = secondTask.isSuccessful() ? secondTask.getResult() : null;
                         Text thirdText = thirdTask.isSuccessful() ? thirdTask.getResult() : null;
-                        Measurement decodedSevenSegment = decodeSevenSegmentMeasurement(enhanced, secondText);
-                        if (decodedSevenSegment == null) {
-                            decodedSevenSegment = decodeSevenSegmentMeasurement(original, thirdText);
-                        }
-                        final Measurement sevenSegment = decodedSevenSegment;
-                        Bitmap focused = createFocusedMeasurementBitmap(enhanced, secondText);
-                        if (focused == null) focused = createFocusedMeasurementBitmap(original, thirdText);
-                        if (focused == null) {
-                            finishMeasurementRecognition(sevenSegment, firstText, secondText, thirdText);
-                            closeMeasurementRecognition(latinRecognizer, japaneseRecognizer, original, enhanced, null);
-                            return;
-                        }
-                        Bitmap finalFocused = focused;
-                        Bitmap thresholded = thresholdMeasurementBitmap(finalFocused, false);
-                        Bitmap inverted = thresholdMeasurementBitmap(finalFocused, true);
-                        latinRecognizer.process(InputImage.fromBitmap(finalFocused, 0)).addOnCompleteListener(fourthTask ->
-                            japaneseRecognizer.process(InputImage.fromBitmap(finalFocused, 0)).addOnCompleteListener(fifthTask -> {
-                                Text fourthText = fourthTask.isSuccessful() ? fourthTask.getResult() : null;
-                                Text fifthText = fifthTask.isSuccessful() ? fifthTask.getResult() : null;
-                                latinRecognizer.process(InputImage.fromBitmap(thresholded, 0)).addOnCompleteListener(sixthTask ->
-                                    latinRecognizer.process(InputImage.fromBitmap(inverted, 0)).addOnCompleteListener(seventhTask -> {
-                                        Text sixthText = sixthTask.isSuccessful() ? sixthTask.getResult() : null;
-                                        Text seventhText = seventhTask.isSuccessful() ? seventhTask.getResult() : null;
-                                        finishMeasurementRecognition(sevenSegment, firstText, secondText, thirdText, fourthText,
-                                            fifthText, sixthText, seventhText);
-                                        thresholded.recycle();
-                                        inverted.recycle();
-                                        closeMeasurementRecognition(latinRecognizer, japaneseRecognizer, original,
-                                            enhanced, finalFocused);
-                                    }));
+                        Bitmap heightRow = createGuidedNumberRow(original, true);
+                        Bitmap weightRow = createGuidedNumberRow(original, false);
+                        latinRecognizer.process(InputImage.fromBitmap(heightRow, 0)).addOnCompleteListener(heightTask ->
+                            latinRecognizer.process(InputImage.fromBitmap(weightRow, 0)).addOnCompleteListener(weightTask -> {
+                                Text heightText = heightTask.isSuccessful() ? heightTask.getResult() : null;
+                                Text weightText = weightTask.isSuccessful() ? weightTask.getResult() : null;
+                                Measurement guidedMeasurement = decodeGuidedMeasurement(heightText, weightText);
+                                heightRow.recycle();
+                                weightRow.recycle();
+                                continueMeasurementRecognition(original, enhanced, latinRecognizer, japaneseRecognizer,
+                                    guidedMeasurement, firstText, secondText, thirdText, heightText, weightText);
                             }));
                     })));
         } catch (Exception error) {
             deleteMeasurementPhoto();
             dispatchMeasurementError(error.getMessage());
         }
+    }
+
+    private void continueMeasurementRecognition(Bitmap original, Bitmap enhanced,
+                                                  TextRecognizer latinRecognizer,
+                                                  TextRecognizer japaneseRecognizer,
+                                                  Measurement guidedMeasurement,
+                                                  Text firstText, Text secondText, Text thirdText,
+                                                  Text heightText, Text weightText) {
+        Measurement decodedSevenSegment = decodeSevenSegmentMeasurement(enhanced, secondText);
+        if (decodedSevenSegment == null) decodedSevenSegment = decodeSevenSegmentMeasurement(original, thirdText);
+        final Measurement sevenSegment = guidedMeasurement != null ? guidedMeasurement : decodedSevenSegment;
+        Bitmap focused = createFocusedMeasurementBitmap(enhanced, secondText);
+        if (focused == null) focused = createFocusedMeasurementBitmap(original, thirdText);
+        if (focused == null) {
+            finishMeasurementRecognition(sevenSegment, firstText, secondText, thirdText, heightText, weightText);
+            closeMeasurementRecognition(latinRecognizer, japaneseRecognizer, original, enhanced, null);
+            return;
+        }
+        Bitmap finalFocused = focused;
+        Bitmap thresholded = thresholdMeasurementBitmap(finalFocused, false);
+        Bitmap inverted = thresholdMeasurementBitmap(finalFocused, true);
+        latinRecognizer.process(InputImage.fromBitmap(finalFocused, 0)).addOnCompleteListener(fourthTask ->
+            japaneseRecognizer.process(InputImage.fromBitmap(finalFocused, 0)).addOnCompleteListener(fifthTask -> {
+                Text fourthText = fourthTask.isSuccessful() ? fourthTask.getResult() : null;
+                Text fifthText = fifthTask.isSuccessful() ? fifthTask.getResult() : null;
+                latinRecognizer.process(InputImage.fromBitmap(thresholded, 0)).addOnCompleteListener(sixthTask ->
+                    latinRecognizer.process(InputImage.fromBitmap(inverted, 0)).addOnCompleteListener(seventhTask -> {
+                        Text sixthText = sixthTask.isSuccessful() ? sixthTask.getResult() : null;
+                        Text seventhText = seventhTask.isSuccessful() ? seventhTask.getResult() : null;
+                        finishMeasurementRecognition(sevenSegment, firstText, secondText, thirdText,
+                            heightText, weightText, fourthText, fifthText, sixthText, seventhText);
+                        thresholded.recycle();
+                        inverted.recycle();
+                        closeMeasurementRecognition(latinRecognizer, japaneseRecognizer, original,
+                            enhanced, finalFocused);
+                    }));
+            }));
+    }
+
+    private Bitmap createGuidedNumberRow(Bitmap source, boolean height) {
+        int left = Math.round(source.getWidth() * 0.18f);
+        int right = Math.round(source.getWidth() * 0.96f);
+        int top = Math.round(source.getHeight() * (height ? 0.04f : 0.48f));
+        int bottom = Math.round(source.getHeight() * (height ? 0.54f : 0.96f));
+        Bitmap crop = Bitmap.createBitmap(source, left, top, right - left, bottom - top);
+        Bitmap enhanced = enhanceMeasurementBitmap(crop);
+        if (enhanced != crop) crop.recycle();
+        Log.i(TAG, "Measurement guided row=" + (height ? "height" : "weight")
+            + " size=" + enhanced.getWidth() + "x" + enhanced.getHeight());
+        return enhanced;
+    }
+
+    private Measurement decodeGuidedMeasurement(Text heightText, Text weightText) {
+        Double height = decodeGuidedValue(heightText, true);
+        Double weight = decodeGuidedValue(weightText, false);
+        Log.i(TAG, "Measurement guided OCR height=" + summarizeRecognizedText(
+            heightText == null ? "" : heightText.getText()) + " weight=" + summarizeRecognizedText(
+            weightText == null ? "" : weightText.getText()));
+        if (height == null || weight == null) return null;
+        Log.i(TAG, "Measurement guided value=" + formatMeasurement(height) + "cm "
+            + formatMeasurement(weight) + "kg");
+        return new Measurement(height, weight);
+    }
+
+    private Double decodeGuidedValue(Text text, boolean height) {
+        if (text == null) return null;
+        String numericArea = text.getText().replaceAll("(?i)(cm|kg|ka|k9|kq)", " ");
+        Matcher matcher = Pattern.compile("[A-Za-z0-9|.,]{3,7}").matcher(numericArea);
+        while (matcher.find()) {
+            Double value = decodeAd6351Token(matcher.group(), height);
+            if (value != null && (height ? validHeight(value) : validWeight(value))) return value;
+        }
+        return null;
     }
 
     private Bitmap cropMeasurementGuide(Bitmap source) {
