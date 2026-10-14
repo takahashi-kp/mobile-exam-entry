@@ -13,6 +13,8 @@ services:
         fromDatabase:
           name: mobile-exam-entry-db
           property: connectionString
+      - key: GOOGLE_CLOUD_VISION_API_KEY
+        sync: false
     headers:
       - path: /*
         name: X-Frame-Options

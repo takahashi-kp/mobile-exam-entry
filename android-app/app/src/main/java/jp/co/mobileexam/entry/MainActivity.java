@@ -23,6 +23,7 @@ import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.provider.MediaStore;
 import android.util.Log;
+import android.util.Base64;
 import android.webkit.JavascriptInterface;
 import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
@@ -49,6 +50,13 @@ import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
@@ -222,7 +230,7 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
                     dispatchWebEvent("android-measurement-processing",
                         new JSONObject().put("active", true));
                 } catch (Exception ignored) { }
-                recognizeMeasurementPhoto();
+                recognizeMeasurementWithCloudFallback();
             } else {
                 deleteMeasurementPhoto();
             }
@@ -244,6 +252,86 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
             return;
         }
         dispatchBarcodeEvent("android-barcode-scanned", result.getContents(), result.getFormatName());
+    }
+
+    private void recognizeMeasurementWithCloudFallback() {
+        final ArrayList<File> photos = measurementBatchFiles == null
+            ? new ArrayList<>() : new ArrayList<>(measurementBatchFiles);
+        if (photos.isEmpty()) {
+            recognizeMeasurementPhoto();
+            return;
+        }
+        new Thread(() -> {
+            HttpURLConnection connection = null;
+            try {
+                JSONArray images = new JSONArray();
+                for (File photo : photos) {
+                    Bitmap decoded = decodeOrientedBitmap(photo);
+                    if (decoded == null) continue;
+                    Bitmap guided = cropMeasurementGuide(decoded);
+                    if (guided != decoded) decoded.recycle();
+                    int width = Math.min(guided.getWidth(), 1400);
+                    int height = Math.max(1, Math.round(guided.getHeight()
+                        * (width / (float) guided.getWidth())));
+                    Bitmap scaled = Bitmap.createScaledBitmap(guided, width, height, true);
+                    ByteArrayOutputStream jpeg = new ByteArrayOutputStream();
+                    scaled.compress(Bitmap.CompressFormat.JPEG, 90, jpeg);
+                    images.put(Base64.encodeToString(jpeg.toByteArray(), Base64.NO_WRAP));
+                    if (scaled != guided) scaled.recycle();
+                    guided.recycle();
+                }
+                if (images.length() == 0) throw new Exception("No measurement images");
+
+                URL url = new URL(APP_URL + "api/vision/measurement");
+                connection = (HttpURLConnection) url.openConnection();
+                connection.setRequestMethod("POST");
+                connection.setConnectTimeout(7000);
+                connection.setReadTimeout(25000);
+                connection.setDoOutput(true);
+                connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+                byte[] body = new JSONObject().put("images", images).toString()
+                    .getBytes(StandardCharsets.UTF_8);
+                try (OutputStream output = connection.getOutputStream()) {
+                    output.write(body);
+                }
+                int status = connection.getResponseCode();
+                InputStream stream = status >= 200 && status < 300
+                    ? connection.getInputStream() : connection.getErrorStream();
+                String responseBody = readUtf8(stream);
+                if (status < 200 || status >= 300) throw new Exception("Cloud OCR HTTP " + status);
+                JSONObject result = new JSONObject(responseBody);
+                if (!result.optBoolean("recognized")) throw new Exception("Cloud OCR did not recognize values");
+                JSONObject detail = new JSONObject()
+                    .put("height", result.getString("height"))
+                    .put("weight", result.getString("weight"))
+                    .put("requiresReview", result.optBoolean("requiresReview", true))
+                    .put("candidates", result.optJSONArray("candidates") == null
+                        ? new JSONArray() : result.optJSONArray("candidates"))
+                    .put("source", "cloud-vision")
+                    .put("agreementCount", result.optInt("agreement", 0));
+                Log.i(TAG, "Cloud Vision measurement=" + detail.optString("height")
+                    + "/" + detail.optString("weight"));
+                dispatchWebEvent("android-measurement-scanned", detail);
+                clearMeasurementBatch();
+            } catch (Exception error) {
+                Log.i(TAG, "Cloud Vision unavailable; falling back to on-device OCR: "
+                    + error.getMessage());
+                runOnUiThread(this::recognizeMeasurementPhoto);
+            } finally {
+                if (connection != null) connection.disconnect();
+            }
+        }, "measurement-cloud-ocr").start();
+    }
+
+    private String readUtf8(InputStream stream) throws Exception {
+        if (stream == null) return "";
+        StringBuilder value = new StringBuilder();
+        try (BufferedReader reader = new BufferedReader(
+            new InputStreamReader(stream, StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) value.append(line);
+        }
+        return value.toString();
     }
 
     private void recognizeMeasurementPhoto() {
@@ -831,6 +919,14 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
     }
 
     private void clearMeasurementBatch() {
+        if (measurementBatchFiles != null) {
+            for (File photo : measurementBatchFiles) {
+                if (photo != null && photo.exists() && !photo.delete()) {
+                    Log.w(TAG, "Unable to delete measurement photo");
+                }
+            }
+        }
+        measurementPhoto = null;
         measurementBatchFiles = null;
         measurementBatchResults.clear();
         measurementBatchIndex = 0;

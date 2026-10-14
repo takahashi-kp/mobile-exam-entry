@@ -133,3 +133,16 @@ Start Command: gunicorn server:app
 公開後は `https://<サービス名>.onrender.com/` で開けます。
 
 `DATABASE_URL` と、必要に応じて `SYNC_API_KEY` を設定します。秘密情報はGitへ保存しないでください。
+
+### 身体計測のCloud Vision OCR
+
+Android版はオンライン時、身体計測のガイド枠内を3枚撮影してRender経由でCloud Visionへ送ります。
+Cloud Visionを利用できない場合は、端末内のML Kit OCRへ自動的に切り替わります。
+
+1. Google CloudでCloud Vision APIを有効にします。
+2. Cloud Vision APIだけを許可したAPIキーを作成し、利用上限と予算通知を設定します。
+3. RenderのWeb Serviceに、環境変数 `GOOGLE_CLOUD_VISION_API_KEY` としてキーを登録します。
+4. `/healthz` の `visionConfigured` が `true` になることを確認します。
+
+APIキーはAndroidアプリ、Web画面、GitHubには保存しません。画像は液晶表示のガイド枠内だけを送信し、
+サーバーやデータベースには保存しません。1回の撮影につき最大3枚、各2MBまでに制限しています。

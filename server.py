@@ -1,5 +1,12 @@
 import json
 import os
+import base64
+import re
+import threading
+import time
+import urllib.error
+import urllib.request
+from collections import defaultdict, deque
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -13,8 +20,17 @@ from roster_export import build_roster
 ROOT = Path(__file__).resolve().parent
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 API_KEY = os.environ.get("SYNC_API_KEY", "")
+VISION_API_KEY = os.environ.get("GOOGLE_CLOUD_VISION_API_KEY", "")
+
+VISION_MAX_IMAGES = 3
+VISION_MAX_IMAGE_BYTES = 2 * 1024 * 1024
+VISION_RATE_LIMIT = 30
+VISION_RATE_WINDOW_SECONDS = 60
+vision_requests = defaultdict(deque)
+vision_requests_lock = threading.Lock()
 
 app = Flask(__name__, static_folder=None)
+app.config["MAX_CONTENT_LENGTH"] = 8 * 1024 * 1024
 
 
 def utc_now():
@@ -34,6 +50,98 @@ def json_response(value, status=200):
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
     return response
+
+
+def normalize_ocr_text(value):
+    value = str(value or "").translate(str.maketrans({
+        "０": "0", "１": "1", "２": "2", "３": "3", "４": "4",
+        "５": "5", "６": "6", "７": "7", "８": "8", "９": "9",
+        "．": ".", "，": ".", ",": ".", "ｃ": "c", "ｍ": "m",
+        "ｋ": "k", "ｇ": "g",
+    }))
+    return re.sub(r"[ \t]+", " ", value)
+
+
+def parse_decimal_token(token, kind):
+    token = re.sub(r"\s+", "", str(token or ""))
+    token = token.translate(str.maketrans({"O": "0", "o": "0", "I": "1", "l": "1", "|": "1"}))
+    if not re.fullmatch(r"\d{2,4}(?:\.\d)?", token):
+        return None
+    try:
+        number = float(token)
+    except ValueError:
+        return None
+    if "." not in token:
+        if kind == "height" and number > 210:
+            number /= 10
+        elif kind == "weight" and number > 200:
+            number /= 10
+    valid = 100 <= number <= 210 if kind == "height" else 20 <= number <= 200
+    return round(number, 1) if valid else None
+
+
+def parse_measurement_text(text):
+    """Extract an AD-6351-style height/weight pair from OCR text."""
+    normalized = normalize_ocr_text(text)
+    height = None
+    weight = None
+    number = r"([0-9OoIl|](?:\s*[0-9OoIl|]){1,3}(?:\s*[.]\s*[0-9OoIl|])?)"
+    height_match = re.search(number + r"\s*(?:cm|センチ)", normalized, re.IGNORECASE)
+    weight_match = re.search(number + r"\s*(?:kg|k9|キロ)", normalized, re.IGNORECASE)
+    if height_match:
+        height = parse_decimal_token(height_match.group(1), "height")
+    if weight_match:
+        weight = parse_decimal_token(weight_match.group(1), "weight")
+
+    lines = [line.strip() for line in normalized.splitlines() if line.strip()]
+    tokens = []
+    for line in lines:
+        for match in re.finditer(number, line, re.IGNORECASE):
+            tokens.append(match.group(1))
+    if height is None:
+        for token in tokens:
+            height = parse_decimal_token(token, "height")
+            if height is not None:
+                break
+    if weight is None:
+        start = 1 if height is not None and len(tokens) > 1 else 0
+        for token in tokens[start:]:
+            candidate = parse_decimal_token(token, "weight")
+            if candidate is not None and candidate != height:
+                weight = candidate
+                break
+    if height is None or weight is None:
+        return None
+    return {"height": f"{height:.1f}", "weight": f"{weight:.1f}"}
+
+
+def vision_rate_limited(client_ip):
+    now = time.monotonic()
+    with vision_requests_lock:
+        recent = vision_requests[client_ip]
+        while recent and now - recent[0] > VISION_RATE_WINDOW_SECONDS:
+            recent.popleft()
+        if len(recent) >= VISION_RATE_LIMIT:
+            return True
+        recent.append(now)
+        return False
+
+
+def call_cloud_vision(images):
+    requests = [{
+        "image": {"content": image},
+        "features": [{"type": "TEXT_DETECTION", "maxResults": 20}],
+        "imageContext": {"languageHints": ["en"]},
+    } for image in images]
+    body = json.dumps({"requests": requests}).encode("utf-8")
+    cloud_request = urllib.request.Request(
+        "https://vision.googleapis.com/v1/images:annotate?key=" + VISION_API_KEY,
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(cloud_request, timeout=20) as response:
+        return json.loads(response.read().decode("utf-8"))
 
 
 @app.after_request
@@ -201,7 +309,73 @@ def merge_payload(existing, incoming):
 
 @app.route("/healthz")
 def healthz():
-    return json_response({"ok": True, "databaseConfigured": bool(DATABASE_URL), "syncSchema": 2})
+    return json_response({
+        "ok": True,
+        "databaseConfigured": bool(DATABASE_URL),
+        "visionConfigured": bool(VISION_API_KEY),
+        "syncSchema": 2,
+    })
+
+
+@app.route("/api/vision/measurement", methods=["POST"])
+def recognize_measurement():
+    if not VISION_API_KEY:
+        return json_response({"error": "Cloud Vision is not configured"}, 503)
+    client_ip = request.headers.get("X-Forwarded-For", request.remote_addr or "unknown").split(",")[0].strip()
+    if vision_rate_limited(client_ip):
+        return json_response({"error": "Too many OCR requests"}, 429)
+    payload = request.get_json(silent=True)
+    images = payload.get("images") if isinstance(payload, dict) else None
+    if not isinstance(images, list) or not 1 <= len(images) <= VISION_MAX_IMAGES:
+        return json_response({"error": "1 to 3 images are required"}, 400)
+    for image in images:
+        if not isinstance(image, str):
+            return json_response({"error": "Invalid image"}, 400)
+        try:
+            decoded = base64.b64decode(image, validate=True)
+        except (ValueError, TypeError):
+            return json_response({"error": "Invalid base64 image"}, 400)
+        if not decoded.startswith(b"\xff\xd8\xff") or len(decoded) > VISION_MAX_IMAGE_BYTES:
+            return json_response({"error": "Only JPEG images up to 2 MB are accepted"}, 400)
+    try:
+        result = call_cloud_vision(images)
+    except urllib.error.HTTPError as error:
+        app.logger.warning("Cloud Vision returned HTTP %s", error.code)
+        return json_response({"error": "Cloud Vision request failed"}, 502)
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as error:
+        app.logger.warning("Cloud Vision unavailable: %s", type(error).__name__)
+        return json_response({"error": "Cloud Vision is unavailable"}, 502)
+
+    candidates = []
+    texts = []
+    for response in result.get("responses", []):
+        text = (response.get("fullTextAnnotation") or {}).get("text", "")
+        if not text:
+            annotations = response.get("textAnnotations") or []
+            text = annotations[0].get("description", "") if annotations else ""
+        texts.append(text[:500])
+        measurement = parse_measurement_text(text)
+        if measurement:
+            candidates.append(measurement)
+    if not candidates:
+        return json_response({"ok": False, "recognized": False, "texts": texts})
+
+    best = max(candidates, key=lambda item: sum(other == item for other in candidates))
+    agreement = sum(item == best for item in candidates)
+    labels = []
+    for candidate in candidates:
+        label = f'{candidate["height"]}cm / {candidate["weight"]}kg'
+        if label not in labels:
+            labels.append(label)
+    return json_response({
+        "ok": True,
+        "recognized": True,
+        "height": best["height"],
+        "weight": best["weight"],
+        "requiresReview": agreement < 2,
+        "agreement": agreement,
+        "candidates": labels,
+    })
 
 
 @app.route("/api/roster-export", methods=["POST"])
