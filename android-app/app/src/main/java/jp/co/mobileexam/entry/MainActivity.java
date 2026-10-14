@@ -218,6 +218,10 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
                 measurementBatchResults.clear();
                 measurementBatchIndex = 0;
                 measurementPhoto = measurementBatchFiles.isEmpty() ? null : measurementBatchFiles.get(0);
+                try {
+                    dispatchWebEvent("android-measurement-processing",
+                        new JSONObject().put("active", true));
+                } catch (Exception ignored) { }
                 recognizeMeasurementPhoto();
             } else {
                 deleteMeasurementPhoto();

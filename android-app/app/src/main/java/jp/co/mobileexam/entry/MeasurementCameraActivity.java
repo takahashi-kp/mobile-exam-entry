@@ -46,6 +46,7 @@ public final class MeasurementCameraActivity extends ComponentActivity {
     private static final int CAMERA_PERMISSION_REQUEST = 501;
     private PreviewView previewView;
     private ImageButton captureButton;
+    private TextView instruction;
     private ImageCapture imageCapture;
     private Executor mainExecutor;
     private MediaActionSound captureSound;
@@ -71,7 +72,7 @@ public final class MeasurementCameraActivity extends ComponentActivity {
         root.setGravity(Gravity.CENTER_HORIZONTAL);
         root.setBackgroundColor(Color.rgb(18, 23, 21));
 
-        TextView instruction = new TextView(this);
+        instruction = new TextView(this);
         instruction.setText("液晶全体を枠内に合わせてください\n撮影ボタンを押すと3枚連続で撮影します");
         instruction.setTextColor(Color.WHITE);
         instruction.setTextSize(17);
@@ -133,6 +134,7 @@ public final class MeasurementCameraActivity extends ComponentActivity {
     private void capture() {
         if (imageCapture == null) return;
         captureButton.setEnabled(false);
+        instruction.setText("撮影中　数字を枠に入れたままにしてください\n3枚を連続で撮影しています");
         playCaptureStartTone();
         captureSequence(new ArrayList<>(), 0);
     }
@@ -159,6 +161,8 @@ public final class MeasurementCameraActivity extends ComponentActivity {
                     @Override public void onImageSaved(
                         @NonNull ImageCapture.OutputFileResults output) {
                         paths.add(photo.getAbsolutePath());
+                        instruction.setText("撮影中　数字を枠に入れたままにしてください\n"
+                            + paths.size() + " / " + BURST_COUNT + " 枚");
                         if (paths.size() >= BURST_COUNT) {
                             setResult(RESULT_OK, new Intent()
                                 .putExtra(EXTRA_PHOTO_PATH, paths.get(0))
@@ -173,11 +177,13 @@ public final class MeasurementCameraActivity extends ComponentActivity {
                         if (photo.exists()) photo.delete();
                         deletePhotos(paths);
                         captureButton.setEnabled(true);
+                        instruction.setText("液晶全体を枠内に合わせてください\n撮影ボタンを押すと3枚連続で撮影します");
                         showFailure("写真を保存できませんでした。");
                     }
                 });
         } catch (Exception error) {
             captureButton.setEnabled(true);
+            instruction.setText("液晶全体を枠内に合わせてください\n撮影ボタンを押すと3枚連続で撮影します");
             showFailure("撮影用ファイルを準備できませんでした。");
         }
     }

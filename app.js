@@ -709,6 +709,7 @@ function bindUi() {
   window.addEventListener("android-barcode-error", handleAndroidBarcodeError);
   window.addEventListener("android-measurement-scanned", handleAndroidMeasurementScanned);
   window.addEventListener("android-measurement-error", handleAndroidMeasurementError);
+  window.addEventListener("android-measurement-processing", handleAndroidMeasurementProcessing);
   window.addEventListener("android-back-request", handleAndroidBackRequest);
   document.querySelectorAll(".barcode-scan-button").forEach((button) => {
     button.addEventListener("click", startNativeBarcodeScan);
@@ -847,11 +848,13 @@ async function startNativeMeasurementScan() {
 }
 
 function handleAndroidMeasurementError(event) {
+  setMeasurementProcessing(false);
   const detail = String(event.detail?.text || "").trim();
   toast(detail || "身長と体重を認識できませんでした。もう一度撮影してください。", true);
 }
 
 async function handleAndroidMeasurementScanned(event) {
+  setMeasurementProcessing(false);
   let height = normalizeMeasurementValue(event.detail?.height, 88, 210);
   let weight = normalizeMeasurementValue(event.detail?.weight, 2, 150.8);
   const candidates = Array.isArray(event.detail?.candidates)
@@ -904,6 +907,27 @@ async function handleAndroidMeasurementScanned(event) {
     updateEntryBmi();
     toast(`身長 ${height}cm、体重 ${weight}kg、BMI ${bmi}を読み取りました。`);
   }
+}
+
+function handleAndroidMeasurementProcessing(event) {
+  setMeasurementProcessing(Boolean(event.detail?.active));
+}
+
+function setMeasurementProcessing(active) {
+  if (!appToast) return;
+  const wasProcessing = appToast.classList.contains("processing");
+  window.clearTimeout(toast.hideTimer);
+  appToast.classList.toggle("processing", active);
+  if (active) {
+    appToast.textContent = "計算中…";
+    appToast.classList.remove("error");
+    appToast.classList.add("visible");
+    return;
+  }
+  if (!wasProcessing) return;
+  appToast.classList.remove("processing", "visible");
+  document.body.classList.remove("toast-visible");
+  document.body.style.removeProperty("--toast-reserved-space");
 }
 
 function normalizeMeasurementValue(value, minimum, maximum) {

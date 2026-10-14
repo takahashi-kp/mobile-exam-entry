@@ -88,6 +88,23 @@ body.smartphone-device[data-view="entry"][data-entry-mode="menu"] .patient-stick
   background: #9b2514;
 }
 
+.app-toast.processing::before {
+  content: "";
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  margin-right: 10px;
+  border: 2px solid rgba(255, 255, 255, .45);
+  border-top-color: #fff;
+  border-radius: 50%;
+  vertical-align: -2px;
+  animation: processing-spin .8s linear infinite;
+}
+
+@keyframes processing-spin {
+  to { transform: rotate(360deg); }
+}
+
 button,
 input,
 select,
