@@ -649,7 +649,14 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
             }
 
             Measurement correctedDisplay = extractAd6351DisplayPattern(recognizedTexts);
-            if (sevenSegment == null) sevenSegment = correctedDisplay;
+            // A complete OCR pair from the display is more reliable than the geometric
+            // seven-segment fallback, especially when a monitor introduces moire.
+            if (correctedDisplay != null) {
+                Log.i(TAG, "Measurement selected source=display OCR value="
+                    + formatMeasurement(correctedDisplay.height) + "cm "
+                    + formatMeasurement(correctedDisplay.weight) + "kg");
+                sevenSegment = correctedDisplay;
+            }
 
             Measurement measurement = findRepeatedMeasurement(trustedMeasurements);
             if (measurement != null && sevenSegment != null && !sameMeasurement(measurement, sevenSegment)) {
@@ -713,6 +720,55 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
                 Log.i(TAG, "AD-6351 corrected OCR=" + formatMeasurement(height) + "cm "
                     + formatMeasurement(weight) + "kg from " + heightMatcher.group(1) + "/"
                     + weightMatcher.group(1));
+                return new Measurement(height, weight);
+            }
+        }
+        // ML Kit often omits the decimal point and units on seven-segment displays,
+        // but preserves the top-to-bottom order (for example 1700 followed by 665).
+        // Prefer that clear pair over trying to reconstruct missing leading segments.
+        for (Text text : recognizedTexts) {
+            Measurement numericPair = extractOrderedDisplayPair(text);
+            if (numericPair != null) return numericPair;
+        }
+        return null;
+    }
+
+    private Measurement extractOrderedDisplayPair(Text text) {
+        if (text == null) return null;
+        List<NumericCandidate> candidates = new ArrayList<>();
+        for (Text.TextBlock block : text.getTextBlocks()) {
+            for (Text.Line line : block.getLines()) {
+                Rect box = line.getBoundingBox();
+                Matcher matcher = DECIMAL_VALUE.matcher(normalizeOcrText(line.getText()));
+                while (matcher.find()) {
+                    String token = matcher.group(1).replace(',', '.');
+                    double raw;
+                    try { raw = Double.parseDouble(token); }
+                    catch (NumberFormatException ignored) { continue; }
+                    candidates.add(new NumericCandidate(raw,
+                        box == null ? 0 : box.centerX(), box == null ? 0 : box.centerY(),
+                        box == null ? 0 : box.height()));
+                }
+            }
+        }
+        candidates.sort(Comparator.comparingInt((NumericCandidate item) -> item.y)
+            .thenComparingInt(item -> item.x));
+        for (int heightIndex = 0; heightIndex < candidates.size(); heightIndex++) {
+            NumericCandidate heightItem = candidates.get(heightIndex);
+            Double height = normalizeHeightValue(heightItem.value);
+            // The display has one decimal place. Requiring a 4-digit raw height value
+            // rejects labels such as the instrument's 100 kg capacity marking.
+            boolean heightShape = heightItem.value >= 880.0;
+            if (height == null || !heightShape) continue;
+            for (int weightIndex = heightIndex + 1; weightIndex < candidates.size(); weightIndex++) {
+                NumericCandidate weightItem = candidates.get(weightIndex);
+                if (weightItem.y < heightItem.y) continue;
+                Double weight = normalizeWeightValue(weightItem.value);
+                boolean weightShape = weightItem.value > 150.8;
+                if (weight == null || !weightShape) continue;
+                Log.i(TAG, "AD-6351 ordered OCR=" + formatMeasurement(height) + "cm "
+                    + formatMeasurement(weight) + "kg from " + heightItem.value + "/"
+                    + weightItem.value);
                 return new Measurement(height, weight);
             }
         }
