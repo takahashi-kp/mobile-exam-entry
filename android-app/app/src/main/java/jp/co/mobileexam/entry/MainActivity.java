@@ -257,6 +257,10 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
             Bitmap enhanced = enhanceMeasurementBitmap(original);
             TextRecognizer latinRecognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
             TextRecognizer japaneseRecognizer = TextRecognition.getClient(new JapaneseTextRecognizerOptions.Builder().build());
+            if (measurementBatchFiles != null && measurementBatchFiles.size() > 1) {
+                recognizeBurstMeasurementPhoto(original, enhanced, latinRecognizer, japaneseRecognizer);
+                return;
+            }
             latinRecognizer.process(InputImage.fromBitmap(original, 0)).addOnCompleteListener(firstTask ->
                 latinRecognizer.process(InputImage.fromBitmap(enhanced, 0)).addOnCompleteListener(secondTask ->
                     japaneseRecognizer.process(InputImage.fromBitmap(original, 0)).addOnCompleteListener(thirdTask -> {
@@ -280,6 +284,28 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
             deleteMeasurementPhoto();
             completeMeasurementRecognition(null);
         }
+    }
+
+    private void recognizeBurstMeasurementPhoto(Bitmap original, Bitmap enhanced,
+                                                   TextRecognizer latinRecognizer,
+                                                   TextRecognizer japaneseRecognizer) {
+        Bitmap heightRow = createGuidedNumberRow(original, true);
+        Bitmap weightRow = createGuidedNumberRow(original, false);
+        latinRecognizer.process(InputImage.fromBitmap(enhanced, 0)).addOnCompleteListener(displayTask ->
+            latinRecognizer.process(InputImage.fromBitmap(heightRow, 0)).addOnCompleteListener(heightTask ->
+                latinRecognizer.process(InputImage.fromBitmap(weightRow, 0)).addOnCompleteListener(weightTask -> {
+                    Text displayText = displayTask.isSuccessful() ? displayTask.getResult() : null;
+                    Text heightText = heightTask.isSuccessful() ? heightTask.getResult() : null;
+                    Text weightText = weightTask.isSuccessful() ? weightTask.getResult() : null;
+                    Measurement guided = decodeGuidedMeasurement(heightText, weightText);
+                    Measurement geometric = guided != null
+                        ? guided : decodeSevenSegmentMeasurement(enhanced, displayText);
+                    heightRow.recycle();
+                    weightRow.recycle();
+                    finishMeasurementRecognition(geometric, displayText, heightText, weightText);
+                    closeMeasurementRecognition(latinRecognizer, japaneseRecognizer,
+                        original, enhanced, null);
+                })));
     }
 
     private void continueMeasurementRecognition(Bitmap original, Bitmap enhanced,
@@ -377,7 +403,11 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
     }
 
     private Bitmap decodeOrientedBitmap(File photo) throws Exception {
-        Bitmap decoded = BitmapFactory.decodeFile(photo.getAbsolutePath());
+        BitmapFactory.Options options = new BitmapFactory.Options();
+        // Camera photos are much larger than the seven-segment display needs. Decoding
+        // at half resolution avoids repeatedly processing 12 MP bitmaps in burst mode.
+        options.inSampleSize = measurementBatchFiles != null && measurementBatchFiles.size() > 1 ? 2 : 1;
+        Bitmap decoded = BitmapFactory.decodeFile(photo.getAbsolutePath(), options);
         if (decoded == null) return null;
         int orientation = new ExifInterface(photo).getAttributeInt(
             ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL);

@@ -6,8 +6,7 @@ import android.content.pm.PackageManager;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
-import android.media.AudioManager;
-import android.media.ToneGenerator;
+import android.media.MediaActionSound;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
@@ -49,10 +48,13 @@ public final class MeasurementCameraActivity extends ComponentActivity {
     private ImageButton captureButton;
     private ImageCapture imageCapture;
     private Executor mainExecutor;
+    private MediaActionSound captureSound;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         mainExecutor = ContextCompat.getMainExecutor(this);
+        captureSound = new MediaActionSound();
+        captureSound.load(MediaActionSound.SHUTTER_CLICK);
         buildView();
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
             == PackageManager.PERMISSION_GRANTED) {
@@ -136,9 +138,13 @@ public final class MeasurementCameraActivity extends ComponentActivity {
     }
 
     private void playCaptureStartTone() {
-        ToneGenerator tone = new ToneGenerator(AudioManager.STREAM_MUSIC, 75);
-        tone.startTone(ToneGenerator.TONE_PROP_BEEP, 120);
-        captureButton.postDelayed(tone::release, 250);
+        captureSound.play(MediaActionSound.SHUTTER_CLICK);
+        captureButton.performHapticFeedback(android.view.HapticFeedbackConstants.CONFIRM);
+    }
+
+    @Override protected void onDestroy() {
+        if (captureSound != null) captureSound.release();
+        super.onDestroy();
     }
 
     private void captureSequence(ArrayList<String> paths, int index) {
