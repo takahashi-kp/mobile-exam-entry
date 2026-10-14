@@ -93,7 +93,7 @@ class MergePayloadTests(unittest.TestCase):
         client = app.test_client()
 
         guide = client.get("/android-download.html")
-        apk = client.get("/downloads/mobile-exam-entry-android-v0.1.19.apk")
+        apk = client.get("/downloads/mobile-exam-entry-android-v0.1.20.apk")
 
         self.assertEqual(guide.status_code, 200)
         self.assertIn("APKをダウンロード".encode(), guide.data)

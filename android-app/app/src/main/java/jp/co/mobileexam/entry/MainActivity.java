@@ -578,6 +578,9 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
                 }
             }
 
+            Measurement correctedDisplay = extractAd6351DisplayPattern(recognizedTexts);
+            if (sevenSegment == null) sevenSegment = correctedDisplay;
+
             Measurement measurement = findRepeatedMeasurement(trustedMeasurements);
             if (measurement != null && sevenSegment != null && !sameMeasurement(measurement, sevenSegment)) {
                 measurement = null;
@@ -621,6 +624,67 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
             dispatchWebEvent("android-measurement-scanned", detail);
         } catch (Exception error) {
             dispatchMeasurementError(error.getMessage());
+        }
+    }
+
+    private Measurement extractAd6351DisplayPattern(Text... recognizedTexts) {
+        Pattern heightPattern = Pattern.compile("([A-Za-z0-9|.,]{3,6})\\s*cm", Pattern.CASE_INSENSITIVE);
+        Pattern weightPattern = Pattern.compile("([A-Za-z0-9|.,]{3,6})\\s*(?:kg|k9|kq)", Pattern.CASE_INSENSITIVE);
+        for (int index = recognizedTexts.length - 1; index >= 0; index--) {
+            Text text = recognizedTexts[index];
+            if (text == null) continue;
+            String recognized = text.getText().replaceAll("[\\r\\n]+", " ");
+            Matcher heightMatcher = heightPattern.matcher(recognized);
+            Matcher weightMatcher = weightPattern.matcher(recognized);
+            if (!heightMatcher.find() || !weightMatcher.find()) continue;
+            Double height = decodeAd6351Token(heightMatcher.group(1), true);
+            Double weight = decodeAd6351Token(weightMatcher.group(1), false);
+            if (height != null && weight != null && validHeight(height) && validWeight(weight)) {
+                Log.i(TAG, "AD-6351 corrected OCR=" + formatMeasurement(height) + "cm "
+                    + formatMeasurement(weight) + "kg from " + heightMatcher.group(1) + "/"
+                    + weightMatcher.group(1));
+                return new Measurement(height, weight);
+            }
+        }
+        return null;
+    }
+
+    private Double decodeAd6351Token(String token, boolean height) {
+        String raw = token.replace(".", "").replace(",", "");
+        int required = height ? 4 : 3;
+        if (raw.length() > required) raw = raw.substring(raw.length() - required);
+        if (height && raw.length() == 3) raw += "0";
+        if (raw.length() != required) return null;
+        StringBuilder digits = new StringBuilder();
+        for (int index = 0; index < raw.length(); index++) {
+            char value = raw.charAt(index);
+            char digit;
+            if (Character.isDigit(value)) {
+                digit = value;
+            } else {
+                switch (value) {
+                    case 'I': case 'i': case 'l': case '|': digit = '1'; break;
+                    case 'Z': case 'z': digit = '2'; break;
+                    case 'A': case 'a': digit = '4'; break;
+                    case 'S': case 's': digit = '5'; break;
+                    case 'b': case 'G': digit = '6'; break;
+                    case 'T': case 't': digit = '7'; break;
+                    case 'B': digit = '8'; break;
+                    case 'g': case 'q': digit = '9'; break;
+                    case 'O': case 'o': case 'D': digit = '0'; break;
+                    case 'U': case 'u':
+                        digit = height && index == 1 ? '7' : '0';
+                        break;
+                    default: return null;
+                }
+            }
+            digits.append(digit);
+        }
+        try {
+            return Double.parseDouble(digits.substring(0, required - 1) + "."
+                + digits.substring(required - 1));
+        } catch (NumberFormatException ignored) {
+            return null;
         }
     }
 
