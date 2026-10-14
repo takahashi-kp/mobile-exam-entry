@@ -190,13 +190,7 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
     private void startMeasurementScan() {
         runOnUiThread(() -> {
             try {
-                File directory = new File(getCacheDir(), "measurement-photos");
-                if (!directory.exists() && !directory.mkdirs()) throw new Exception("撮影用フォルダを準備できませんでした。");
-                measurementPhoto = File.createTempFile("ad6351-", ".jpg", directory);
-                Uri uri = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", measurementPhoto);
-                Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-                intent.putExtra(MediaStore.EXTRA_OUTPUT, uri);
-                intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                Intent intent = new Intent(this, MeasurementCameraActivity.class);
                 startActivityForResult(intent, MEASUREMENT_CAMERA_REQUEST);
             } catch (Exception error) {
                 deleteMeasurementPhoto();
@@ -207,7 +201,13 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
 
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         if (requestCode == MEASUREMENT_CAMERA_REQUEST) {
-            if (resultCode == RESULT_OK) recognizeMeasurementPhoto(); else deleteMeasurementPhoto();
+            if (resultCode == RESULT_OK && data != null) {
+                String path = data.getStringExtra(MeasurementCameraActivity.EXTRA_PHOTO_PATH);
+                measurementPhoto = path == null ? null : new File(path);
+                recognizeMeasurementPhoto();
+            } else {
+                deleteMeasurementPhoto();
+            }
             return;
         }
         Log.i(TAG, "Scanner result request=" + requestCode + " result=" + resultCode);
@@ -235,8 +235,11 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
             return;
         }
         try {
-            Bitmap original = decodeOrientedBitmap(photo);
-            if (original == null) throw new Exception("撮影画像を読み込めませんでした。");
+            Bitmap decoded = decodeOrientedBitmap(photo);
+            if (decoded == null) throw new Exception("撮影画像を読み込めませんでした。");
+            Bitmap guided = cropMeasurementGuide(decoded);
+            if (guided != decoded) decoded.recycle();
+            final Bitmap original = guided;
             Bitmap enhanced = enhanceMeasurementBitmap(original);
             TextRecognizer latinRecognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
             TextRecognizer japaneseRecognizer = TextRecognition.getClient(new JapaneseTextRecognizerOptions.Builder().build());
@@ -282,6 +285,19 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
             deleteMeasurementPhoto();
             dispatchMeasurementError(error.getMessage());
         }
+    }
+
+    private Bitmap cropMeasurementGuide(Bitmap source) {
+        int left = Math.round(source.getWidth() * MeasurementCameraActivity.GUIDE_LEFT);
+        int top = Math.round(source.getHeight() * MeasurementCameraActivity.GUIDE_TOP);
+        int right = Math.round(source.getWidth() * MeasurementCameraActivity.GUIDE_RIGHT);
+        int bottom = Math.round(source.getHeight() * MeasurementCameraActivity.GUIDE_BOTTOM);
+        left = Math.max(0, Math.min(left, source.getWidth() - 2));
+        top = Math.max(0, Math.min(top, source.getHeight() - 2));
+        right = Math.max(left + 1, Math.min(right, source.getWidth()));
+        bottom = Math.max(top + 1, Math.min(bottom, source.getHeight()));
+        Log.i(TAG, "Measurement guide crop=" + left + "," + top + "-" + right + "," + bottom);
+        return Bitmap.createBitmap(source, left, top, right - left, bottom - top);
     }
 
     private Bitmap decodeOrientedBitmap(File photo) throws Exception {
