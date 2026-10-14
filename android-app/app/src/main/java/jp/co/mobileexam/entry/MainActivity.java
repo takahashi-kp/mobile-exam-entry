@@ -76,6 +76,9 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
     private SharedPreferences bindings;
     private SharedPreferences deviceSettings;
     private File measurementPhoto;
+    private ArrayList<File> measurementBatchFiles;
+    private final ArrayList<JSONObject> measurementBatchResults = new ArrayList<>();
+    private int measurementBatchIndex;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -202,8 +205,19 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         if (requestCode == MEASUREMENT_CAMERA_REQUEST) {
             if (resultCode == RESULT_OK && data != null) {
-                String path = data.getStringExtra(MeasurementCameraActivity.EXTRA_PHOTO_PATH);
-                measurementPhoto = path == null ? null : new File(path);
+                ArrayList<String> paths = data.getStringArrayListExtra(
+                    MeasurementCameraActivity.EXTRA_PHOTO_PATHS);
+                measurementBatchFiles = new ArrayList<>();
+                if (paths != null) {
+                    for (String path : paths) if (path != null) measurementBatchFiles.add(new File(path));
+                }
+                if (measurementBatchFiles.isEmpty()) {
+                    String path = data.getStringExtra(MeasurementCameraActivity.EXTRA_PHOTO_PATH);
+                    if (path != null) measurementBatchFiles.add(new File(path));
+                }
+                measurementBatchResults.clear();
+                measurementBatchIndex = 0;
+                measurementPhoto = measurementBatchFiles.isEmpty() ? null : measurementBatchFiles.get(0);
                 recognizeMeasurementPhoto();
             } else {
                 deleteMeasurementPhoto();
@@ -231,7 +245,7 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
     private void recognizeMeasurementPhoto() {
         File photo = measurementPhoto;
         if (photo == null || !photo.isFile()) {
-            dispatchMeasurementError("撮影画像を読み込めませんでした。");
+            completeMeasurementRecognition(null);
             return;
         }
         try {
@@ -264,7 +278,7 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
                     })));
         } catch (Exception error) {
             deleteMeasurementPhoto();
-            dispatchMeasurementError(error.getMessage());
+            completeMeasurementRecognition(null);
         }
     }
 
@@ -666,7 +680,7 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
                 JSONObject detail = new JSONObject()
                     .put("height", formatMeasurement(measurement.height))
                     .put("weight", formatMeasurement(measurement.weight));
-                dispatchWebEvent("android-measurement-scanned", detail);
+                completeMeasurementRecognition(detail);
                 return;
             }
 
@@ -698,10 +712,83 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
                 }
             }
             detail.put("candidates", candidates);
-            dispatchWebEvent("android-measurement-scanned", detail);
+            completeMeasurementRecognition(detail);
+        } catch (Exception error) {
+            completeMeasurementRecognition(null);
+        }
+    }
+
+    private void completeMeasurementRecognition(JSONObject detail) {
+        if (measurementBatchFiles == null || measurementBatchFiles.size() <= 1) {
+            if (detail == null) dispatchMeasurementError("身長と体重を認識できませんでした。");
+            else dispatchWebEvent("android-measurement-scanned", detail);
+            clearMeasurementBatch();
+            return;
+        }
+        if (detail != null && detail.has("height") && detail.has("weight")) {
+            measurementBatchResults.add(detail);
+        }
+        measurementBatchIndex++;
+        if (measurementBatchIndex < measurementBatchFiles.size()) {
+            File nextPhoto = measurementBatchFiles.get(measurementBatchIndex);
+            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                measurementPhoto = nextPhoto;
+                recognizeMeasurementPhoto();
+            }, 120);
+            return;
+        }
+        dispatchMeasurementConsensus();
+        clearMeasurementBatch();
+    }
+
+    private void dispatchMeasurementConsensus() {
+        if (measurementBatchResults.isEmpty()) {
+            dispatchMeasurementError("身長と体重を認識できませんでした。もう一度撮影してください。");
+            return;
+        }
+        JSONObject best = measurementBatchResults.get(0);
+        int bestCount = 0;
+        JSONArray allCandidates = new JSONArray();
+        ArrayList<String> uniqueCandidates = new ArrayList<>();
+        for (JSONObject candidate : measurementBatchResults) {
+            String height = candidate.optString("height");
+            String weight = candidate.optString("weight");
+            int count = 0;
+            for (JSONObject other : measurementBatchResults) {
+                if (height.equals(other.optString("height"))
+                    && weight.equals(other.optString("weight"))) count++;
+            }
+            String label = height + "cm / " + weight + "kg";
+            if (!uniqueCandidates.contains(label)) {
+                uniqueCandidates.add(label);
+                allCandidates.put(label);
+            }
+            if (count > bestCount) {
+                best = candidate;
+                bestCount = count;
+            }
+        }
+        try {
+            JSONObject result = new JSONObject()
+                .put("height", best.optString("height"))
+                .put("weight", best.optString("weight"))
+                .put("requiresReview", bestCount < 2)
+                .put("candidates", allCandidates)
+                .put("sampleCount", measurementBatchResults.size())
+                .put("agreementCount", bestCount);
+            Log.i(TAG, "Measurement burst consensus=" + bestCount + "/"
+                + measurementBatchResults.size() + " value=" + result.optString("height")
+                + "/" + result.optString("weight"));
+            dispatchWebEvent("android-measurement-scanned", result);
         } catch (Exception error) {
             dispatchMeasurementError(error.getMessage());
         }
+    }
+
+    private void clearMeasurementBatch() {
+        measurementBatchFiles = null;
+        measurementBatchResults.clear();
+        measurementBatchIndex = 0;
     }
 
     private Measurement extractAd6351DisplayPattern(Text... recognizedTexts) {

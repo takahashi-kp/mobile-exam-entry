@@ -30,10 +30,13 @@ import androidx.core.content.ContextCompat;
 import com.google.common.util.concurrent.ListenableFuture;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.concurrent.Executor;
 
 public final class MeasurementCameraActivity extends ComponentActivity {
     public static final String EXTRA_PHOTO_PATH = "measurementPhotoPath";
+    public static final String EXTRA_PHOTO_PATHS = "measurementPhotoPaths";
+    private static final int BURST_COUNT = 3;
     public static final float GUIDE_LEFT = 0.08f;
     public static final float GUIDE_TOP = 0.18f;
     public static final float GUIDE_RIGHT = 0.92f;
@@ -126,6 +129,10 @@ public final class MeasurementCameraActivity extends ComponentActivity {
     private void capture() {
         if (imageCapture == null) return;
         captureButton.setEnabled(false);
+        captureSequence(new ArrayList<>(), 0);
+    }
+
+    private void captureSequence(ArrayList<String> paths, int index) {
         try {
             File directory = new File(getCacheDir(), "measurement-photos");
             if (!directory.exists() && !directory.mkdirs()) throw new Exception();
@@ -136,13 +143,20 @@ public final class MeasurementCameraActivity extends ComponentActivity {
                 new ImageCapture.OnImageSavedCallback() {
                     @Override public void onImageSaved(
                         @NonNull ImageCapture.OutputFileResults output) {
-                        setResult(RESULT_OK,
-                            new Intent().putExtra(EXTRA_PHOTO_PATH, photo.getAbsolutePath()));
-                        finish();
+                        paths.add(photo.getAbsolutePath());
+                        if (paths.size() >= BURST_COUNT) {
+                            setResult(RESULT_OK, new Intent()
+                                .putExtra(EXTRA_PHOTO_PATH, paths.get(0))
+                                .putStringArrayListExtra(EXTRA_PHOTO_PATHS, paths));
+                            finish();
+                            return;
+                        }
+                        captureButton.postDelayed(() -> captureSequence(paths, index + 1), 250);
                     }
 
                     @Override public void onError(@NonNull ImageCaptureException error) {
                         if (photo.exists()) photo.delete();
+                        deletePhotos(paths);
                         captureButton.setEnabled(true);
                         showFailure("写真を保存できませんでした。");
                     }
@@ -150,6 +164,13 @@ public final class MeasurementCameraActivity extends ComponentActivity {
         } catch (Exception error) {
             captureButton.setEnabled(true);
             showFailure("撮影用ファイルを準備できませんでした。");
+        }
+    }
+
+    private void deletePhotos(ArrayList<String> paths) {
+        for (String path : paths) {
+            File photo = new File(path);
+            if (photo.exists()) photo.delete();
         }
     }
 
