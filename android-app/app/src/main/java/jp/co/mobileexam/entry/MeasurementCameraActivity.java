@@ -6,6 +6,8 @@ import android.content.pm.PackageManager;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.media.AudioManager;
+import android.media.ToneGenerator;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
@@ -68,7 +70,7 @@ public final class MeasurementCameraActivity extends ComponentActivity {
         root.setBackgroundColor(Color.rgb(18, 23, 21));
 
         TextView instruction = new TextView(this);
-        instruction.setText("液晶全体を枠内に合わせてください\n身長と体重の数字が各枠に入ったら撮影します");
+        instruction.setText("液晶全体を枠内に合わせてください\n撮影ボタンを押すと3枚連続で撮影します");
         instruction.setTextColor(Color.WHITE);
         instruction.setTextSize(17);
         instruction.setGravity(Gravity.CENTER);
@@ -129,7 +131,14 @@ public final class MeasurementCameraActivity extends ComponentActivity {
     private void capture() {
         if (imageCapture == null) return;
         captureButton.setEnabled(false);
+        playCaptureStartTone();
         captureSequence(new ArrayList<>(), 0);
+    }
+
+    private void playCaptureStartTone() {
+        ToneGenerator tone = new ToneGenerator(AudioManager.STREAM_MUSIC, 75);
+        tone.startTone(ToneGenerator.TONE_PROP_BEEP, 120);
+        captureButton.postDelayed(tone::release, 250);
     }
 
     private void captureSequence(ArrayList<String> paths, int index) {

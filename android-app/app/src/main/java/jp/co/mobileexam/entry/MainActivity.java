@@ -291,6 +291,14 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
         Measurement decodedSevenSegment = decodeSevenSegmentMeasurement(enhanced, secondText);
         if (decodedSevenSegment == null) decodedSevenSegment = decodeSevenSegmentMeasurement(original, thirdText);
         final Measurement sevenSegment = guidedMeasurement != null ? guidedMeasurement : decodedSevenSegment;
+        // Burst mode already compares three independent photos. Avoid four additional OCR
+        // passes per photo so the result appears much sooner on lower-spec devices.
+        if (measurementBatchFiles != null && measurementBatchFiles.size() > 1) {
+            finishMeasurementRecognition(sevenSegment, firstText, secondText, thirdText,
+                heightText, weightText);
+            closeMeasurementRecognition(latinRecognizer, japaneseRecognizer, original, enhanced, null);
+            return;
+        }
         Bitmap focused = createFocusedMeasurementBitmap(enhanced, secondText);
         if (focused == null) focused = createFocusedMeasurementBitmap(original, thirdText);
         if (focused == null) {
