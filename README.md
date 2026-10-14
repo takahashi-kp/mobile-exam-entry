@@ -136,7 +136,7 @@ Start Command: gunicorn server:app
 
 ### 身体計測のCloud Vision OCR
 
-Android版はオンライン時、身体計測のガイド枠内を3枚撮影してRender経由でCloud Visionへ送ります。
+Android版はオンライン時、身体計測のガイド枠内を1枚撮影してRender経由でCloud Visionへ送ります。
 Cloud Visionを利用できない場合は、端末内のML Kit OCRへ自動的に切り替わります。
 
 1. Google CloudでCloud Vision APIを有効にします。
@@ -145,4 +145,5 @@ Cloud Visionを利用できない場合は、端末内のML Kit OCRへ自動的�
 4. `/healthz` の `visionConfigured` が `true` になることを確認します。
 
 APIキーはAndroidアプリ、Web画面、GitHubには保存しません。画像は液晶表示のガイド枠内だけを送信し、
-サーバーやデータベースには保存しません。1回の撮影につき最大3枚、各2MBまでに制限しています。
+サーバーやデータベースには保存しません。Android版は1回の撮影につき1枚を送信します。
+サーバー側は1リクエスト最大3枚、各2MBまでに制限しています。

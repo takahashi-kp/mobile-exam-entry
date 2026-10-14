@@ -372,7 +372,7 @@ def recognize_measurement():
         "recognized": True,
         "height": best["height"],
         "weight": best["weight"],
-        "requiresReview": agreement < 2,
+        "requiresReview": len(images) > 1 and agreement < 2,
         "agreement": agreement,
         "candidates": labels,
     })

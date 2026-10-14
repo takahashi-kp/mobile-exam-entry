@@ -37,7 +37,7 @@ import java.util.concurrent.Executor;
 public final class MeasurementCameraActivity extends ComponentActivity {
     public static final String EXTRA_PHOTO_PATH = "measurementPhotoPath";
     public static final String EXTRA_PHOTO_PATHS = "measurementPhotoPaths";
-    private static final int BURST_COUNT = 3;
+    private static final int BURST_COUNT = 1;
     public static final float GUIDE_LEFT = 0.08f;
     public static final float GUIDE_TOP = 0.18f;
     public static final float GUIDE_RIGHT = 0.92f;
@@ -73,7 +73,7 @@ public final class MeasurementCameraActivity extends ComponentActivity {
         root.setBackgroundColor(Color.rgb(18, 23, 21));
 
         instruction = new TextView(this);
-        instruction.setText("液晶全体を枠内に合わせてください\n撮影ボタンを押すと3枚連続で撮影します");
+        instruction.setText("液晶全体を枠内に合わせてください\n撮影ボタンを押して1枚撮影します");
         instruction.setTextColor(Color.WHITE);
         instruction.setTextSize(17);
         instruction.setGravity(Gravity.CENTER);
@@ -134,7 +134,7 @@ public final class MeasurementCameraActivity extends ComponentActivity {
     private void capture() {
         if (imageCapture == null) return;
         captureButton.setEnabled(false);
-        instruction.setText("撮影中　数字を枠に入れたままにしてください\n3枚を連続で撮影しています");
+        instruction.setText("撮影中　数字を枠に入れたままにしてください");
         playCaptureStartTone();
         captureSequence(new ArrayList<>(), 0);
     }
@@ -177,13 +177,13 @@ public final class MeasurementCameraActivity extends ComponentActivity {
                         if (photo.exists()) photo.delete();
                         deletePhotos(paths);
                         captureButton.setEnabled(true);
-                        instruction.setText("液晶全体を枠内に合わせてください\n撮影ボタンを押すと3枚連続で撮影します");
+                        instruction.setText("液晶全体を枠内に合わせてください\n撮影ボタンを押して1枚撮影します");
                         showFailure("写真を保存できませんでした。");
                     }
                 });
         } catch (Exception error) {
             captureButton.setEnabled(true);
-            instruction.setText("液晶全体を枠内に合わせてください\n撮影ボタンを押すと3枚連続で撮影します");
+            instruction.setText("液晶全体を枠内に合わせてください\n撮影ボタンを押して1枚撮影します");
             showFailure("撮影用ファイルを準備できませんでした。");
         }
     }
