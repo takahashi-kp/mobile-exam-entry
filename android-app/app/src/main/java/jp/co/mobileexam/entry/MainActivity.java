@@ -298,11 +298,9 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
                     Text heightText = heightTask.isSuccessful() ? heightTask.getResult() : null;
                     Text weightText = weightTask.isSuccessful() ? weightTask.getResult() : null;
                     Measurement guided = decodeGuidedMeasurement(heightText, weightText);
-                    Measurement geometric = guided != null
-                        ? guided : decodeSevenSegmentMeasurement(enhanced, displayText);
                     heightRow.recycle();
                     weightRow.recycle();
-                    finishMeasurementRecognition(geometric, displayText, heightText, weightText);
+                    finishMeasurementRecognition(guided, displayText, heightText, weightText);
                     closeMeasurementRecognition(latinRecognizer, japaneseRecognizer,
                         original, enhanced, null);
                 })));
@@ -381,6 +379,15 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
     private Double decodeGuidedValue(Text text, boolean height) {
         if (text == null) return null;
         String numericArea = text.getText().replaceAll("(?i)(cm|kg|ka|k9|kq)", " ");
+        Matcher plainDigits = Pattern.compile("(?<![0-9])([0-9]{3,4})(?:[.,])?(?![0-9])")
+            .matcher(numericArea);
+        while (plainDigits.find()) {
+            try {
+                double raw = Double.parseDouble(plainDigits.group(1));
+                Double value = height ? normalizeHeightValue(raw) : normalizeWeightValue(raw);
+                if (value != null) return value;
+            } catch (NumberFormatException ignored) { }
+        }
         Matcher matcher = Pattern.compile("[A-Za-z0-9|.,]{3,7}").matcher(numericArea);
         while (matcher.find()) {
             Double value = decodeAd6351Token(matcher.group(), height);
@@ -403,11 +410,7 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
     }
 
     private Bitmap decodeOrientedBitmap(File photo) throws Exception {
-        BitmapFactory.Options options = new BitmapFactory.Options();
-        // Camera photos are much larger than the seven-segment display needs. Decoding
-        // at half resolution avoids repeatedly processing 12 MP bitmaps in burst mode.
-        options.inSampleSize = measurementBatchFiles != null && measurementBatchFiles.size() > 1 ? 2 : 1;
-        Bitmap decoded = BitmapFactory.decodeFile(photo.getAbsolutePath(), options);
+        Bitmap decoded = BitmapFactory.decodeFile(photo.getAbsolutePath());
         if (decoded == null) return null;
         int orientation = new ExifInterface(photo).getAttributeInt(
             ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL);
