@@ -88,6 +88,10 @@ def parse_measurement_text(text):
     number = r"([0-9OoIl|](?:\s*[0-9OoIl|]){1,3}(?:\s*[.]\s*[0-9OoIl|])?)"
     height_match = re.search(number + r"\s*(?:cm|センチ)", normalized, re.IGNORECASE)
     weight_match = re.search(number + r"\s*(?:kg|k9|キロ)", normalized, re.IGNORECASE)
+    if not height_match:
+        height_match = re.search(r"height\s*[:=-]?\s*" + number, normalized, re.IGNORECASE)
+    if not weight_match:
+        weight_match = re.search(r"weight\s*[:=-]?\s*" + number, normalized, re.IGNORECASE)
     if height_match:
         height = parse_decimal_token(height_match.group(1), "height")
     if weight_match:

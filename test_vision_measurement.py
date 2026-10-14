@@ -28,6 +28,12 @@ class VisionMeasurementParsingTests(unittest.TestCase):
             {"height": "170.0", "weight": "66.5"},
         )
 
+    def test_generated_row_labels_without_units(self):
+        self.assertEqual(
+            parse_measurement_text("HEIGHT\n170.0\nWEIGHT\n66.5"),
+            {"height": "170.0", "weight": "66.5"},
+        )
+
     def test_rejects_incomplete_result(self):
         self.assertIsNone(parse_measurement_text("170.0 cm"))
 

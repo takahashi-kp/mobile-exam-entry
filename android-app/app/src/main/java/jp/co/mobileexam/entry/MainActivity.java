@@ -7,8 +7,10 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Matrix;
+import android.graphics.Paint;
 import android.graphics.Rect;
 import android.net.Uri;
 import android.media.AudioManager;
@@ -270,15 +272,12 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
                     if (decoded == null) continue;
                     Bitmap guided = cropMeasurementGuide(decoded);
                     if (guided != decoded) decoded.recycle();
-                    int width = Math.min(guided.getWidth(), 1400);
-                    int height = Math.max(1, Math.round(guided.getHeight()
-                        * (width / (float) guided.getWidth())));
-                    Bitmap scaled = Bitmap.createScaledBitmap(guided, width, height, true);
-                    ByteArrayOutputStream jpeg = new ByteArrayOutputStream();
-                    scaled.compress(Bitmap.CompressFormat.JPEG, 90, jpeg);
-                    images.put(Base64.encodeToString(jpeg.toByteArray(), Base64.NO_WRAP));
-                    if (scaled != guided) scaled.recycle();
+                    Bitmap cloudImage = createCloudVisionMeasurementBitmap(guided);
                     guided.recycle();
+                    ByteArrayOutputStream jpeg = new ByteArrayOutputStream();
+                    cloudImage.compress(Bitmap.CompressFormat.JPEG, 92, jpeg);
+                    images.put(Base64.encodeToString(jpeg.toByteArray(), Base64.NO_WRAP));
+                    cloudImage.recycle();
                 }
                 if (images.length() == 0) throw new Exception("No measurement images");
 
@@ -332,6 +331,40 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
             while ((line = reader.readLine()) != null) value.append(line);
         }
         return value.toString();
+    }
+
+    private Bitmap createCloudVisionMeasurementBitmap(Bitmap source) {
+        int left = Math.round(source.getWidth() * 0.16f);
+        int right = Math.round(source.getWidth() * 0.97f);
+        int split = Math.round(source.getHeight() * 0.52f);
+        Bitmap heightRow = Bitmap.createBitmap(source, left, 0,
+            Math.max(1, right - left), Math.max(1, split));
+        Bitmap weightRow = Bitmap.createBitmap(source, left, split,
+            Math.max(1, right - left), Math.max(1, source.getHeight() - split));
+
+        int outputWidth = 1400;
+        int labelHeight = 100;
+        int rowHeight = 620;
+        Bitmap output = Bitmap.createBitmap(outputWidth,
+            (labelHeight + rowHeight) * 2, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(output);
+        canvas.drawColor(Color.WHITE);
+        Paint imagePaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+        Paint labelPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        labelPaint.setColor(Color.BLACK);
+        labelPaint.setTextSize(58);
+        labelPaint.setFakeBoldText(true);
+        canvas.drawText("HEIGHT", 28, 70, labelPaint);
+        canvas.drawBitmap(heightRow, null,
+            new Rect(0, labelHeight, outputWidth, labelHeight + rowHeight), imagePaint);
+        int weightTop = labelHeight + rowHeight;
+        canvas.drawText("WEIGHT", 28, weightTop + 70, labelPaint);
+        canvas.drawBitmap(weightRow, null,
+            new Rect(0, weightTop + labelHeight, outputWidth,
+                weightTop + labelHeight + rowHeight), imagePaint);
+        heightRow.recycle();
+        weightRow.recycle();
+        return output;
     }
 
     private void recognizeMeasurementPhoto() {

@@ -137,6 +137,7 @@ Start Command: gunicorn server:app
 ### 身体計測のCloud Vision OCR
 
 Android版はオンライン時、身体計測のガイド枠内を1枚撮影してRender経由でCloud Visionへ送ります。
+送信前に身長と体重の表示行を分離・拡大して1枚へ再構成するため、API利用回数は1回のままです。
 Cloud Visionを利用できない場合は、端末内のML Kit OCRへ自動的に切り替わります。
 
 1. Google CloudでCloud Vision APIを有効にします。
