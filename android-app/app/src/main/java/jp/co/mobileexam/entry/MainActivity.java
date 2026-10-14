@@ -246,10 +246,15 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
                         Text firstText = firstTask.isSuccessful() ? firstTask.getResult() : null;
                         Text secondText = secondTask.isSuccessful() ? secondTask.getResult() : null;
                         Text thirdText = thirdTask.isSuccessful() ? thirdTask.getResult() : null;
+                        Measurement decodedSevenSegment = decodeSevenSegmentMeasurement(enhanced, secondText);
+                        if (decodedSevenSegment == null) {
+                            decodedSevenSegment = decodeSevenSegmentMeasurement(original, thirdText);
+                        }
+                        final Measurement sevenSegment = decodedSevenSegment;
                         Bitmap focused = createFocusedMeasurementBitmap(enhanced, secondText);
                         if (focused == null) focused = createFocusedMeasurementBitmap(original, thirdText);
                         if (focused == null) {
-                            finishMeasurementRecognition(firstText, secondText, thirdText);
+                            finishMeasurementRecognition(sevenSegment, firstText, secondText, thirdText);
                             closeMeasurementRecognition(latinRecognizer, japaneseRecognizer, original, enhanced, null);
                             return;
                         }
@@ -264,7 +269,7 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
                                     latinRecognizer.process(InputImage.fromBitmap(inverted, 0)).addOnCompleteListener(seventhTask -> {
                                         Text sixthText = sixthTask.isSuccessful() ? sixthTask.getResult() : null;
                                         Text seventhText = seventhTask.isSuccessful() ? seventhTask.getResult() : null;
-                                        finishMeasurementRecognition(firstText, secondText, thirdText, fourthText,
+                                        finishMeasurementRecognition(sevenSegment, firstText, secondText, thirdText, fourthText,
                                             fifthText, sixthText, seventhText);
                                         thresholded.recycle();
                                         inverted.recycle();
@@ -404,7 +409,159 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
         return focused;
     }
 
-    private void finishMeasurementRecognition(Text... recognizedTexts) {
+    private Measurement decodeSevenSegmentMeasurement(Bitmap source, Text text) {
+        if (source == null || text == null) return null;
+        Rect centimeter = findUnitElement(text, "cm");
+        Rect kilogram = findUnitElement(text, "kg", "k9", "kq");
+        if (centimeter == null || kilogram == null) return null;
+        int rowGap = Math.abs(kilogram.centerY() - centimeter.centerY());
+        if (rowGap < 30) return null;
+        Double height = decodeSevenSegmentRow(source, centimeter, rowGap, 4, 3.65f);
+        Double weight = decodeSevenSegmentRow(source, kilogram, rowGap, 3, 2.75f);
+        if (height == null || weight == null || !validHeight(height) || !validWeight(weight)) return null;
+        Log.i(TAG, "AD-6351 seven-segment=" + formatMeasurement(height) + "cm "
+            + formatMeasurement(weight) + "kg");
+        return new Measurement(height, weight);
+    }
+
+    private Rect findUnitElement(Text text, String... units) {
+        for (Text.TextBlock block : text.getTextBlocks()) {
+            for (Text.Line line : block.getLines()) {
+                for (Text.Element element : line.getElements()) {
+                    String value = normalizeOcrText(element.getText()).toLowerCase(Locale.ROOT)
+                        .replace(" ", "");
+                    for (String unit : units) {
+                        if (value.contains(unit)) return element.getBoundingBox();
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    private Double decodeSevenSegmentRow(Bitmap source, Rect unit, int rowGap,
+                                         int digitCount, float rowWidthFactor) {
+        int right = Math.min(source.getWidth(), unit.left - Math.round(rowGap * 0.04f));
+        int left = Math.max(0, right - Math.round(rowGap * rowWidthFactor));
+        int centerY = unit.centerY() - Math.round(rowGap * 0.05f);
+        int top = Math.max(0, centerY - Math.round(rowGap * 0.43f));
+        int bottom = Math.min(source.getHeight(), centerY + Math.round(rowGap * 0.43f));
+        if (right - left < digitCount * 20 || bottom - top < 40) return null;
+
+        int threshold = otsuThreshold(source, left, top, right, bottom);
+        float slotWidth = (right - left) / (float) digitCount;
+        StringBuilder digits = new StringBuilder();
+        for (int index = 0; index < digitCount; index++) {
+            int slotLeft = Math.round(left + slotWidth * index);
+            int slotRight = Math.round(left + slotWidth * (index + 1));
+            int digit = classifySevenSegmentDigit(source, slotLeft, top, slotRight, bottom, threshold);
+            if (digit < 0) return null;
+            digits.append(digit);
+        }
+        try {
+            return Double.parseDouble(digits.substring(0, digitCount - 1) + "."
+                + digits.substring(digitCount - 1));
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    private int otsuThreshold(Bitmap source, int left, int top, int right, int bottom) {
+        int[] histogram = new int[256];
+        for (int y = top; y < bottom; y += 2) {
+            for (int x = left; x < right; x += 2) histogram[gray(source.getPixel(x, y))]++;
+        }
+        long total = 0;
+        long weightedTotal = 0;
+        for (int value = 0; value < histogram.length; value++) {
+            total += histogram[value];
+            weightedTotal += (long) value * histogram[value];
+        }
+        long backgroundWeight = 0;
+        long backgroundTotal = 0;
+        double largestVariance = -1;
+        int threshold = 128;
+        for (int value = 0; value < histogram.length; value++) {
+            backgroundWeight += histogram[value];
+            backgroundTotal += (long) value * histogram[value];
+            long foregroundWeight = total - backgroundWeight;
+            if (backgroundWeight == 0 || foregroundWeight == 0) continue;
+            double backgroundMean = backgroundTotal / (double) backgroundWeight;
+            double foregroundMean = (weightedTotal - backgroundTotal) / (double) foregroundWeight;
+            double variance = (double) backgroundWeight * foregroundWeight
+                * Math.pow(backgroundMean - foregroundMean, 2);
+            if (variance > largestVariance) {
+                largestVariance = variance;
+                threshold = value;
+            }
+        }
+        return threshold;
+    }
+
+    private int classifySevenSegmentDigit(Bitmap source, int left, int top, int right,
+                                          int bottom, int threshold) {
+        float[][] regions = {
+            {0.23f, 0.03f, 0.77f, 0.17f}, // top
+            {0.72f, 0.14f, 0.94f, 0.48f}, // upper right
+            {0.72f, 0.52f, 0.94f, 0.86f}, // lower right
+            {0.23f, 0.83f, 0.77f, 0.97f}, // bottom
+            {0.06f, 0.52f, 0.28f, 0.86f}, // lower left
+            {0.06f, 0.14f, 0.28f, 0.48f}, // upper left
+            {0.23f, 0.43f, 0.77f, 0.57f}  // middle
+        };
+        double[] darkness = new double[7];
+        for (int segment = 0; segment < regions.length; segment++) {
+            float[] region = regions[segment];
+            darkness[segment] = darkRatio(source,
+                Math.round(left + (right - left) * region[0]),
+                Math.round(top + (bottom - top) * region[1]),
+                Math.round(left + (right - left) * region[2]),
+                Math.round(top + (bottom - top) * region[3]), threshold);
+        }
+        int[] masks = {0x3f, 0x06, 0x5b, 0x4f, 0x66, 0x6d, 0x7d, 0x07, 0x7f, 0x6f};
+        int bestDigit = -1;
+        double bestScore = -1;
+        double secondScore = -1;
+        for (int digit = 0; digit < masks.length; digit++) {
+            double score = 0;
+            for (int segment = 0; segment < darkness.length; segment++) {
+                boolean expected = (masks[digit] & (1 << segment)) != 0;
+                score += expected ? darkness[segment] : 1.0 - darkness[segment];
+            }
+            score /= darkness.length;
+            if (score > bestScore) {
+                secondScore = bestScore;
+                bestScore = score;
+                bestDigit = digit;
+            } else if (score > secondScore) {
+                secondScore = score;
+            }
+        }
+        return bestScore >= 0.60 && bestScore - secondScore >= 0.025 ? bestDigit : -1;
+    }
+
+    private double darkRatio(Bitmap source, int left, int top, int right, int bottom, int threshold) {
+        int dark = 0;
+        int count = 0;
+        left = Math.max(0, left);
+        top = Math.max(0, top);
+        right = Math.min(source.getWidth(), right);
+        bottom = Math.min(source.getHeight(), bottom);
+        for (int y = top; y < bottom; y += 2) {
+            for (int x = left; x < right; x += 2) {
+                if (gray(source.getPixel(x, y)) <= threshold) dark++;
+                count++;
+            }
+        }
+        return count == 0 ? 0 : dark / (double) count;
+    }
+
+    private int gray(int color) {
+        return Math.round(Color.red(color) * 0.299f + Color.green(color) * 0.587f
+            + Color.blue(color) * 0.114f);
+    }
+
+    private void finishMeasurementRecognition(Measurement sevenSegment, Text... recognizedTexts) {
         try {
             List<Measurement> measurements = new ArrayList<>();
             List<Measurement> trustedMeasurements = new ArrayList<>();
@@ -422,6 +579,9 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
             }
 
             Measurement measurement = findRepeatedMeasurement(trustedMeasurements);
+            if (measurement != null && sevenSegment != null && !sameMeasurement(measurement, sevenSegment)) {
+                measurement = null;
+            }
             if (measurement != null) {
                 JSONObject detail = new JSONObject()
                     .put("height", formatMeasurement(measurement.height))
@@ -434,10 +594,21 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
             PartialMeasurement partial = extractPartialMeasurement(
                 Arrays.copyOfRange(recognizedTexts, 0, trustedCount));
             JSONObject detail = new JSONObject().put("requiresReview", true);
-            if (partial.height != null) detail.put("height", formatMeasurement(partial.height));
-            if (partial.weight != null) detail.put("weight", formatMeasurement(partial.weight));
+            if (sevenSegment != null) {
+                detail.put("height", formatMeasurement(sevenSegment.height));
+                detail.put("weight", formatMeasurement(sevenSegment.weight));
+            } else {
+                if (partial.height != null) detail.put("height", formatMeasurement(partial.height));
+                if (partial.weight != null) detail.put("weight", formatMeasurement(partial.weight));
+            }
             JSONArray candidates = new JSONArray();
             List<String> uniqueCandidates = new ArrayList<>();
+            if (sevenSegment != null) {
+                String label = formatMeasurement(sevenSegment.height) + "cm / "
+                    + formatMeasurement(sevenSegment.weight) + "kg（7セグ判定）";
+                uniqueCandidates.add(label);
+                candidates.put(label);
+            }
             for (Measurement candidate : measurements) {
                 String label = formatMeasurement(candidate.height) + "cm / "
                     + formatMeasurement(candidate.weight) + "kg";
