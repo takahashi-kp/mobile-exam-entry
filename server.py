@@ -248,17 +248,28 @@ def normalize_birth_digits(value):
     return re.sub(r"\D", "", str(value or ""))
 
 
+def canonical_birth_digits(value):
+    text = str(value or "").strip()
+    parts = re.fullmatch(r"\s*(\d{4})\D+(\d{1,2})\D+(\d{1,2})\D*", text)
+    if parts:
+        year, month, day = (int(part) for part in parts.groups())
+        if 1 <= month <= 12 and 1 <= day <= 31:
+            return f"{year:04d}{month:02d}{day:02d}"
+        return ""
+    digits = normalize_birth_digits(text)
+    return digits if len(digits) == 8 else ""
+
+
 def birth_month_day(value):
-    digits = normalize_birth_digits(value)
+    digits = canonical_birth_digits(value)
     return digits[-4:] if len(digits) >= 4 else ""
 
 
 def birth_value_matches(expected_birth, supplied_birth):
-    expected = normalize_birth_digits(expected_birth)
+    expected = canonical_birth_digits(expected_birth)
     supplied = normalize_birth_digits(supplied_birth)
-    if len(expected) < 8:
+    if len(expected) != 8:
         return False
-    expected = expected[-8:]
     if len(supplied) == 4:
         return secrets.compare_digest(expected[-4:], supplied)
     if len(supplied) == 6:
