@@ -33,6 +33,8 @@ class MergePayloadTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("次の方のQRコード".encode(), response.data)
+        self.assertIn(b'id="scanQuestionnaireQr"', response.data)
+        self.assertIn(b"android-barcode-scanned", response.data)
 
     def test_android_download_qr_is_png(self):
         client = app.test_client()

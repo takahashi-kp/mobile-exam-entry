@@ -13,11 +13,52 @@
     <section class="panel complete">
       <h2>次の方のQRコードを読み取ってください</h2>
       <p>回答送信後は、氏名と回答内容を端末から消去してこの画面へ戻ります。</p>
+      <button class="primary" id="scanQuestionnaireQr" type="button" hidden>QRコードを読み取る</button>
+      <p id="scanQuestionnaireState" role="status">スマートフォンのカメラで、受診案内のQRコードを読み取ってください。</p>
       <button id="leaveSharedMode" type="button">会場問診モードを終了</button>
     </section>
   </main>
   <script>
     localStorage.setItem("questionnaireSharedDevice", "1");
+    const scanButton = document.querySelector("#scanQuestionnaireQr");
+    const scanState = document.querySelector("#scanQuestionnaireState");
+    const hasAndroidScanner = Boolean(window.AndroidFelica && typeof window.AndroidFelica.request === "function");
+    scanButton.hidden = !hasAndroidScanner;
+    if (hasAndroidScanner) scanState.textContent = "ボタンを押して、受診案内のQRコードを枠内に合わせてください。";
+
+    scanButton.addEventListener("click", () => {
+      scanState.textContent = "カメラを起動しています…";
+      try {
+        const result = JSON.parse(window.AndroidFelica.request("/barcode/scan", "{}"));
+        if (!result.ok) throw new Error(result.error || "カメラを起動できませんでした。");
+      } catch (error) {
+        scanState.textContent = error.message || "カメラを起動できませんでした。";
+      }
+    });
+
+    window.addEventListener("android-barcode-scanned", (event) => {
+      const value = String(event.detail?.text || "").trim();
+      try {
+        const target = new URL(value);
+        const validPath = /^\/questionnaire\/[A-Za-z0-9_-]+$/.test(target.pathname);
+        if (target.protocol !== "https:" || target.host !== location.host || !validPath) {
+          throw new Error("問診案内のQRコードではありません。");
+        }
+        scanState.textContent = "問診画面を開いています…";
+        location.replace(target.href);
+      } catch (error) {
+        scanState.textContent = error.message || "QRコードを確認できませんでした。";
+      }
+    });
+
+    window.addEventListener("android-barcode-error", (event) => {
+      scanState.textContent = event.detail?.text || "QRコードを読み取れませんでした。もう一度お試しください。";
+    });
+
+    window.addEventListener("android-barcode-cancelled", () => {
+      scanState.textContent = "読み取りを中止しました。";
+    });
+
     document.querySelector("#leaveSharedMode").addEventListener("click", () => {
       localStorage.removeItem("questionnaireSharedDevice");
       location.replace("/");
