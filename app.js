@@ -207,6 +207,32 @@ const PROGRESS_GROUPS = [
   { label: "採血", target: "採血", fields: ["採血確認", "採血確認ログ", "採血管バーコード履歴"] },
   { label: "診察", target: "診察", fields: ["巡回診察", "結膜貧血", "甲状腺腫大", "心雑音", "脈の異常", "呼吸音異常", "その他", "その他_自由入力", "巡回診察_自由入力"] }
 ];
+const EXAM_VALUE_RULES = {
+  "視力": [
+    { key: "視力右裸眼", label: "右 裸眼視力", min: 0, max: 2 },
+    { key: "視力右矯正", label: "右 矯正視力", min: 0, max: 2 },
+    { key: "視力左裸眼", label: "左 裸眼視力", min: 0, max: 2 },
+    { key: "視力左矯正", label: "左 矯正視力", min: 0, max: 2 }
+  ],
+  "食後": [
+    { key: "空腹時間（分）", label: "食後時間（分）", min: 0, max: 59, integer: true }
+  ],
+  "血圧": [
+    { key: "1回目最高血圧", label: "1回目 最高血圧", min: 50, max: 300, integer: true },
+    { key: "1回目最低血圧", label: "1回目 最低血圧", min: 30, max: 200, integer: true },
+    { key: "2回目最高血圧", label: "2回目 最高血圧", min: 50, max: 300, integer: true },
+    { key: "2回目最低血圧", label: "2回目 最低血圧", min: 30, max: 200, integer: true }
+  ],
+  "脈": [
+    { key: "脈拍", label: "脈拍", min: 30, max: 220, integer: true }
+  ],
+  "身体": [
+    { key: "身長", label: "身長", min: 80, max: 250, unit: "cm" },
+    { key: "体重", label: "体重", min: 10, max: 300, unit: "kg" },
+    { key: "腹囲", label: "腹囲", min: 30, max: 250, unit: "cm" }
+  ]
+};
+const EXAM_HISTORY_KEY = "mobileExamRoute";
 const MOBILE_EXAM_GROUPS = {
   "便区分": {
     label: "便区分", compact: true,
@@ -396,6 +422,7 @@ async function init() {
   renderQuestionnaireControls();
   setupCollapsibleGroups();
   showEntryMenu();
+  initializeExamHistory();
   bindUi();
   setupNativeBarcodeScanner();
   checkFelicaHelper();
@@ -420,6 +447,31 @@ async function init() {
   window.setInterval(() => pollFelicaForActiveBooth().catch(() => {}), 1200);
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("./sw.js").catch(() => {});
+  }
+}
+
+function initializeExamHistory() {
+  history.replaceState({ ...(history.state || {}), [EXAM_HISTORY_KEY]: "entry-menu" }, "", location.href);
+  window.addEventListener("popstate", handleBrowserBackNavigation);
+}
+
+function pushExamHistory(route) {
+  if (history.state?.[EXAM_HISTORY_KEY] === route) return;
+  history.pushState({ ...(history.state || {}), [EXAM_HISTORY_KEY]: route }, "", location.href);
+}
+
+function replaceExamHistory(route) {
+  history.replaceState({ ...(history.state || {}), [EXAM_HISTORY_KEY]: route }, "", location.href);
+}
+
+async function handleBrowserBackNavigation() {
+  const view = document.body.dataset.view;
+  if (view === "mobile") {
+    await returnFromMobileExam({ fromHistory: true });
+    return;
+  }
+  if (view === "entry" && activeEntryGroup) {
+    await returnToEntryMenu({ fromHistory: true });
   }
 }
 
@@ -1041,6 +1093,67 @@ function handleAndroidBackRequest(event) {
     event.preventDefault();
     returnToEntryMenu();
   }
+}
+
+function numericExamValue(value) {
+  const normalized = String(value ?? "").trim().replace("，", ".").replace(",", ".");
+  if (!normalized) return null;
+  if (!/^-?\d+(?:\.\d+)?$/.test(normalized)) return Number.NaN;
+  return Number(normalized);
+}
+
+function validateExamValues(values, groupKey = "") {
+  const groups = groupKey ? [groupKey] : Object.keys(EXAM_VALUE_RULES);
+  for (const group of groups) {
+    for (const rule of EXAM_VALUE_RULES[group] || []) {
+      const raw = String(values?.[rule.key] ?? "").trim();
+      if (!raw) continue;
+      const number = numericExamValue(raw);
+      if (!Number.isFinite(number)) {
+        return { field: rule.key, message: `${rule.label}は数値で入力してください。` };
+      }
+      if (rule.integer && !Number.isInteger(number)) {
+        return { field: rule.key, message: `${rule.label}は整数で入力してください。` };
+      }
+      if (number < rule.min || number > rule.max) {
+        const unit = rule.unit || "";
+        return {
+          field: rule.key,
+          message: `${rule.label}が入力可能な範囲（${rule.min}～${rule.max}${unit}）を外れています。測定値を確認してください。`
+        };
+      }
+    }
+  }
+
+  if (!groupKey || groupKey === "血圧") {
+    for (const count of ["1回目", "2回目"]) {
+      const systolicKey = `${count}最高血圧`;
+      const diastolicKey = `${count}最低血圧`;
+      const systolic = numericExamValue(values?.[systolicKey]);
+      const diastolic = numericExamValue(values?.[diastolicKey]);
+      if (Number.isFinite(systolic) && Number.isFinite(diastolic) && systolic <= diastolic) {
+        return {
+          field: systolicKey,
+          message: `${count}の最高血圧が最低血圧以下になっています。入力値を確認してください。`
+        };
+      }
+    }
+  }
+  return null;
+}
+
+function showExamValueError(error, mobile = false) {
+  if (!error) return false;
+  window.alert(`入力値を確認してください。\n\n${error.message}`);
+  const selector = mobile
+    ? `[data-mobile-field="${cssEscape(error.field)}"]`
+    : `[name="${cssEscape(error.field)}"]`;
+  const input = (mobile ? mobileExamForm : form)?.querySelector(selector);
+  if (input) {
+    input.scrollIntoView({ behavior: "smooth", block: "center" });
+    window.setTimeout(() => input.focus(), 250);
+  }
+  return true;
 }
 
 async function felicaRequest(path, body) {
@@ -2113,6 +2226,7 @@ async function confirmMobileExam() {
     toast("検査値を入力してください。", true);
     return;
   }
+  if (showExamValueError(validateExamValues(values, activeMobileGroup), true)) return;
   setProgrammaticFormChange(() => {
     Object.entries(values).forEach(([fieldName, value]) => {
       setEntryFormFieldValue(fieldName, value);
@@ -2145,21 +2259,26 @@ function showEntryMenu() {
   updateEntryMenuStatuses();
 }
 
-async function returnToEntryMenu() {
+async function returnToEntryMenu(options = {}) {
   if (entryGroupDirty && isVerifiableEntryGroup(activeEntryGroup)) {
     const shouldRegister = window.confirm("この検査には未登録の変更があります。\n登録（仮保存）して検査選択へ戻りますか？");
     if (shouldRegister) {
-      if (!(await registerActiveEntryGroup({ silent: true }))) return;
+      if (!(await registerActiveEntryGroup({ silent: true }))) {
+        if (options.fromHistory) pushExamHistory(`entry:${activeEntryGroup}`);
+        return;
+      }
     } else {
       discardCurrentUnsavedInput();
     }
   }
   showEntryMenu();
+  if (!options.fromHistory) replaceExamHistory("entry-menu");
 }
 
-async function returnFromMobileExam() {
+async function returnFromMobileExam(options = {}) {
   if (!(await switchView("entry"))) return;
   showEntryMenu();
+  if (!options.fromHistory) replaceExamHistory("entry-menu");
   await updateEntryMenuStatuses();
   document.querySelector("#entryGroupMenu")?.scrollIntoView({ block: "start" });
 }
@@ -2167,11 +2286,13 @@ async function returnFromMobileExam() {
 async function openEntryGroup(groupKey) {
   if (isSmartphoneDevice() && MOBILE_EXAM_GROUPS[groupKey]) {
     activeMobileGroup = groupKey;
+    pushExamHistory(`mobile:${groupKey}`);
     await switchView("mobile");
     return;
   }
   const section = form.querySelector(`.section-block[data-group="${cssEscape(groupKey)}"]`);
   if (!section) return;
+  pushExamHistory(`entry:${groupKey}`);
   activeEntryGroup = groupKey;
   document.body.dataset.entryGroup = groupKey;
   entryGroupDirty = false;
@@ -2313,6 +2434,7 @@ async function registerActiveEntryGroup(options = {}) {
   if (!isVerifiableEntryGroup(activeEntryGroup)) return false;
   normalizeFastingHours();
   const data = formToRecord();
+  if (showExamValueError(validateExamValues(data, activeEntryGroup))) return false;
   if (!activeGroupHasValue(data)) {
     toast("この検査の入力値がありません。結果を入力してから登録してください。", true);
     return false;
@@ -2340,6 +2462,8 @@ async function registerActiveEntryGroup(options = {}) {
 
 async function confirmActiveEntryGroup() {
   if (!isVerifiableEntryGroup(activeEntryGroup) || entryGroupDirty) return;
+  const currentData = formToRecord();
+  if (showExamValueError(validateExamValues(currentData, activeEntryGroup))) return;
   const item = await getCurrentGroupValue(activeEntryGroup);
   const currentState = groupVerificationState(item);
   if (currentState === "confirmed") {
@@ -2354,7 +2478,7 @@ async function confirmActiveEntryGroup() {
     toast("先に「登録（仮保存）」を行ってください。", true);
     return;
   }
-  const data = formToRecord();
+  const data = currentData;
   if (activeEntryGroup === "採血") {
     if (String(data["採血確認"] || "").trim() !== "済") {
       showBloodBarcodeError("エラー　番号が一致しません");
@@ -2880,6 +3004,7 @@ async function saveCurrentRecord() {
   }
   normalizeFastingHours();
   const data = formToRecord();
+  if (showExamValueError(validateExamValues(data))) return;
   await saveRecordData(data);
 }
 
