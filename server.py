@@ -531,6 +531,20 @@ def public_questionnaire_page(token):
     return send_from_directory(ROOT, "public-questionnaire.html")
 
 
+@app.route("/android-download-qr.png")
+def android_download_qr():
+    url = f"{request.host_url.rstrip('/')}/android-download.html"
+    code = qrcode.QRCode(version=None, box_size=8, border=3)
+    code.add_data(url)
+    code.make(fit=True)
+    output = io.BytesIO()
+    code.make_image(fill_color="black", back_color="white").save(output, format="PNG")
+    output.seek(0)
+    response = send_file(output, mimetype="image/png", download_name="android-download-qr.png")
+    response.headers["Cache-Control"] = "public, max-age=3600"
+    return response
+
+
 @app.route("/api/exam-records", methods=["OPTIONS"])
 def exam_records_options():
     return json_response({}, 204)

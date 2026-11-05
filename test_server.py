@@ -34,6 +34,17 @@ class MergePayloadTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("次の方のQRコード".encode(), response.data)
 
+    def test_android_download_qr_is_png(self):
+        client = app.test_client()
+        page = client.get("/android-download.html")
+        qr = client.get("/android-download-qr.png")
+
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(b"android-download-qr.png", page.data)
+        self.assertEqual(qr.status_code, 200)
+        self.assertEqual(qr.mimetype, "image/png")
+        self.assertTrue(qr.data.startswith(b"\x89PNG"))
+
     def test_health_reports_sync_schema(self):
         response = app.test_client().get("/healthz")
 
