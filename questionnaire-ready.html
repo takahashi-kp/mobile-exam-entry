@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#176c6a">
+  <title>会場問診</title>
+  <link rel="stylesheet" href="/public-questionnaire.css?v=20261105-03">
+</head>
+<body>
+  <header class="public-header"><p>出張健診</p><h1>会場問診</h1></header>
+  <main>
+    <section class="panel complete">
+      <h2>次の方のQRコードを読み取ってください</h2>
+      <p>回答送信後は、氏名と回答内容を端末から消去してこの画面へ戻ります。</p>
+      <button id="leaveSharedMode" type="button">会場問診モードを終了</button>
+    </section>
+  </main>
+  <script>
+    localStorage.setItem("questionnaireSharedDevice", "1");
+    document.querySelector("#leaveSharedMode").addEventListener("click", () => {
+      localStorage.removeItem("questionnaireSharedDevice");
+      location.replace("/");
+    });
+  </script>
+</body>
+</html>

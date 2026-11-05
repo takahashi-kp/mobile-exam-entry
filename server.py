@@ -365,13 +365,28 @@ def questionnaire_group_status(group_id):
         group, patients = schedule_group_and_patients(conn, group_id)
         if not group:
             return json_response({"error": "Schedule group not found"}, 404)
+        invitation_rows = conn.execute(
+            "select patient_code, status, updated_at, submitted_at from questionnaire_invitations where group_id = %s",
+            (group_id,),
+        ).fetchall()
         counts = conn.execute(
             "select status, count(*) as count from questionnaire_invitations where group_id = %s group by status",
             (group_id,),
         ).fetchall()
     summary = {"not_started": 0, "in_progress": 0, "submitted": 0}
     summary.update({row["status"]: row["count"] for row in counts})
-    return json_response({"groupId": group_id, "total": len(patients), "counts": summary})
+    result = {"groupId": group_id, "groupName": group.get("name") or "", "total": len(patients), "counts": summary}
+    if request.args.get("details") == "1":
+        invitations = {row["patient_code"]: row for row in invitation_rows}
+        result["patients"] = [{
+            "code": str(patient.get("受診者コード") or ""),
+            "name": patient.get("氏名") or "",
+            "kana": patient.get("カナ氏名") or "",
+            "status": invitations.get(str(patient.get("受診者コード") or ""), {}).get("status", "not_issued"),
+            "updatedAt": invitations.get(str(patient.get("受診者コード") or ""), {}).get("updated_at"),
+            "submittedAt": invitations.get(str(patient.get("受診者コード") or ""), {}).get("submitted_at"),
+        } for patient in patients]
+    return json_response(result)
 
 
 @app.route("/api/questionnaire/groups/<group_id>/packets.pdf", methods=["POST"])
@@ -475,8 +490,8 @@ def public_questionnaire(token):
         action = payload.get("action")
         if not valid_questionnaire_answers(answers) or action not in {"save", "submit"}:
             return json_response({"error": "Invalid questionnaire payload"}, 400)
-        if action == "submit" and (answers.get("問診_同意") != "同意する" or not str(answers.get("問診_署名") or "").strip()):
-            return json_response({"error": "同意と署名を確認してください。"}, 400)
+        if action == "submit" and answers.get("問診_同意") != "同意する":
+            return json_response({"error": "個人情報の取扱いへの同意を確認してください。"}, 400)
         status = "submitted" if action == "submit" else "in_progress"
         conn.execute(
             """

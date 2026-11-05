@@ -24,8 +24,7 @@ const groups = [
     {id:"問診_女性_月経状況",label:"月経の状況",type:"radio",options:["月経中","順調","不順あり","不正出血あり","閉経した","無月経"]},
     {id:"問診_女性_妊娠可能性",label:"妊娠の可能性",type:"radio",options:["可能性なし","可能性あり","妊娠中"]}] },
   { section:"問診票", title:"個人情報の取扱いについて", items:[
-    {id:"問診_同意",label:"個人情報の取扱いに同意する",type:"check",value:"同意する"},
-    {id:"問診_署名",label:"署名",type:"text"}] },
+    {id:"問診_同意",label:"個人情報の取扱いに同意する",type:"check",value:"同意する"}] },
   { section:"特定健康診査質問票", title:"服薬・既往歴", items:[
     ["特定_01_血圧薬","現在、血圧を下げる薬を使用していますか。"],["特定_02_血糖薬","現在、血糖を下げる薬又はインスリン注射を使用していますか。"],["特定_03_脂質薬","現在、コレステロールや中性脂肪を下げる薬を使用していますか。"],["特定_04_脳卒中","医師から、脳卒中にかかっているといわれたり、治療を受けたことがありますか。"],["特定_05_心臓病","医師から、心臓病にかかっているといわれたり、治療を受けたことがありますか。"],["特定_06_腎臓病","医師から、慢性腎臓病や腎不全にかかっているといわれたり、治療を受けていますか。"],["特定_07_貧血","医師から、貧血といわれたことがありますか。"]].map(([id,label])=>({id,label,type:"radio",options:yesNo})) },
   { section:"特定健康診査質問票", title:"喫煙・運動", items:[
@@ -71,7 +70,6 @@ function answers(){
 }
 function validationError(data){
   if(data["問診_同意"]!=="同意する") return ["問診_同意","個人情報の取扱いへの同意が必要です。"];
-  if(!String(data["問診_署名"]||"").trim()) return ["問診_署名","署名を入力してください。"];
   if(/女/.test(patientSex)){
     if(!data["問診_女性_月経状況"]) return ["問診_女性_月経状況","月経の状況を選択してください。"];
     if(!data["問診_女性_妊娠可能性"]) return ["問診_女性_妊娠可能性","妊娠の可能性を選択してください。"];
@@ -96,13 +94,13 @@ async function save(action){
   if(action==="submit") clearTimeout(saveTimer);
   const data=answers(); const error=action==="submit"?validationError(data):null; const errorNode=document.querySelector("#formError"); errorNode.textContent="";
   if(error){errorNode.textContent=error[1]; form.querySelector(`[data-field="${CSS.escape(error[0])}"]`)?.scrollIntoView({behavior:"smooth",block:"center"}); return;}
-  try{document.querySelector("#saveState").textContent="保存中"; await api("POST",{birth:verifiedBirth,answers:data,action}); if(action==="submit"){questionnairePanel.hidden=true; completePanel.hidden=false; sessionStorage.clear(); scrollTo(0,0);}else document.querySelector("#saveState").textContent="保存済み";}catch(error){errorNode.textContent=error.message;document.querySelector("#saveState").textContent="未保存";}
+  try{document.querySelector("#saveState").textContent="保存中"; await api("POST",{birth:verifiedBirth,answers:data,action}); if(action==="submit"){form.replaceChildren(); verifiedBirth=""; patientSex=""; questionnairePanel.hidden=true; completePanel.hidden=false; sessionStorage.clear(); document.querySelector("#clearAndClose").textContent=localStorage.getItem("questionnaireSharedDevice")==="1"?"次の方のQRを読み取る":"終了"; scrollTo(0,0);}else document.querySelector("#saveState").textContent="保存済み";}catch(error){errorNode.textContent=error.message;document.querySelector("#saveState").textContent="未保存";}
 }
 
 document.querySelector("#verifyButton").addEventListener("click",verify);
 birthInput.addEventListener("keydown",event=>{if(event.key==="Enter")verify();});
 document.querySelector("#saveDraft").addEventListener("click",()=>save("save"));
 document.querySelector("#submitAnswers").addEventListener("click",()=>save("submit"));
-document.querySelector("#clearAndClose").addEventListener("click",()=>{location.replace("about:blank");});
+document.querySelector("#clearAndClose").addEventListener("click",()=>{location.replace(localStorage.getItem("questionnaireSharedDevice")==="1"?"/questionnaire-ready.html":"about:blank");});
 form.addEventListener("input",()=>{document.querySelector("#saveState").textContent="未保存"; clearTimeout(saveTimer); saveTimer=setTimeout(()=>save("save"),1500);});
 form.addEventListener("change",event=>{if(event.target.name==="問診_女性_月経状況"&&event.target.value==="閉経した"){const field=form.elements.namedItem("問診_女性_妊娠可能性");[...field].forEach(item=>{item.checked=item.value==="可能性なし";item.disabled=item.value!=="可能性なし";});}});

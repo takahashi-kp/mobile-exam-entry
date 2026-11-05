@@ -140,8 +140,7 @@ const QUESTIONNAIRE_SECTIONS = [
         title: "個人情報の取扱いについて",
         note: "健康診断の目的等を理解した上で、実施主体が指定する者及び健診機関が保健事業、健診精度管理等の目的の範囲内で個人情報を使用することに同意します。",
         items: [
-          { id: "問診_同意", label: "個人情報の取扱いに同意する", type: "checkbox", checkedValue: "同意する" },
-          { id: "問診_署名", label: "署名", type: "text" }
+          { id: "問診_同意", label: "個人情報の取扱いに同意する", type: "checkbox", checkedValue: "同意する" }
         ]
       }
     ]
@@ -3990,7 +3989,7 @@ async function refreshScheduleRows() {
       <td>${formatDate(group.createdAt)}</td>
       <td class="schedule-row-actions">${archived
         ? `<span class="archive-badge">アーカイブ済み</span><button class="ghost" data-restore-group-id="${group.id}" type="button">復元</button>`
-        : `<button class="ghost" data-group-id="${group.id}" type="button">${active ? "選択中" : "開く"}</button><button class="ghost" data-questionnaire-pdf="${group.id}" type="button">問診案内PDF</button><button class="danger-ghost" data-archive-group-id="${group.id}" type="button">アーカイブ</button>`}
+        : `<button class="ghost" data-group-id="${group.id}" type="button">${active ? "選択中" : "開く"}</button><button class="ghost" data-questionnaire-detail="${group.id}" type="button">問診状況</button><button class="ghost" data-questionnaire-pdf="${group.id}" type="button">問診案内PDF</button><button class="danger-ghost" data-archive-group-id="${group.id}" type="button">アーカイブ</button>`}
       </td>
     `;
     scheduleRows.appendChild(tr);
@@ -4017,6 +4016,9 @@ async function refreshScheduleRows() {
   scheduleRows.querySelectorAll("[data-questionnaire-pdf]").forEach((button) => {
     button.addEventListener("click", () => downloadQuestionnairePackets(button.dataset.questionnairePdf, button));
   });
+  scheduleRows.querySelectorAll("[data-questionnaire-detail]").forEach((button) => {
+    button.addEventListener("click", () => showQuestionnaireDetails(button.dataset.questionnaireDetail));
+  });
   scheduleRows.querySelectorAll("[data-archive-group-id]").forEach((button) => {
     button.addEventListener("click", async () => {
       if (!(await confirmSaveBeforeLeaving())) return;
@@ -4026,6 +4028,39 @@ async function refreshScheduleRows() {
   scheduleRows.querySelectorAll("[data-restore-group-id]").forEach((button) => {
     button.addEventListener("click", () => restoreScheduleGroup(button.dataset.restoreGroupId));
   });
+}
+
+async function showQuestionnaireDetails(groupId) {
+  const panel = document.querySelector("#questionnaireScheduleDetail");
+  const body = document.querySelector("#questionnaireScheduleRows");
+  const title = document.querySelector("#questionnaireScheduleTitle");
+  if (!panel || !body || !title) return;
+  panel.hidden = false;
+  title.textContent = "問診回答状況";
+  body.innerHTML = '<tr><td colspan="5">読み込み中です…</td></tr>';
+  panel.scrollIntoView({ behavior: "smooth", block: "start" });
+  try {
+    const settings = await getCloudSettings();
+    const apiOrigin = new URL(settings.url, location.href).origin;
+    const response = await fetch(`${apiOrigin}/api/questionnaire/groups/${encodeURIComponent(groupId)}/status?details=1`, { headers: cloudHeaders(settings) });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    title.textContent = `${data.groupName || ""} 問診回答状況`;
+    body.innerHTML = data.patients.map((patient) => `
+      <tr>
+        <td>${escapeHtml(patient.code)}</td>
+        <td>${escapeHtml(patient.kana)}<br><strong>${escapeHtml(patient.name)}</strong></td>
+        <td><span class="questionnaire-detail-state ${escapeAttribute(patient.status)}">${questionnaireStatusLabel(patient.status)}</span></td>
+        <td>${patient.updatedAt ? formatDate(patient.updatedAt) : ""}</td>
+        <td>${patient.submittedAt ? formatDate(patient.submittedAt) : ""}</td>
+      </tr>`).join("") || '<tr><td colspan="5">受診予定者がいません。</td></tr>';
+  } catch (error) {
+    body.innerHTML = `<tr><td colspan="5">問診状況を読み込めませんでした: ${escapeHtml(error.message)}</td></tr>`;
+  }
+}
+
+function questionnaireStatusLabel(status) {
+  return { not_issued: "未発行", not_started: "未回答", in_progress: "途中", submitted: "回答済み" }[status] || "未回答";
 }
 
 async function refreshQuestionnaireStatus(groupId) {

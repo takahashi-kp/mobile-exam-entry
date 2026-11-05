@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#176c6a">
   <title>出張健診 検査項目入力</title>
   <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="stylesheet" href="./styles.css?v=20261105-02">
+  <link rel="stylesheet" href="./styles.css?v=20261105-03">
 </head>
 <body>
   <div class="app-toast" id="appToast" role="status" aria-live="polite"></div>
@@ -632,6 +632,21 @@
             <tbody id="scheduleRows"></tbody>
           </table>
         </div>
+        <div class="questionnaire-schedule-tools">
+          <a class="button-link ghost" href="./questionnaire-ready.html">会場問診モード</a>
+        </div>
+        <section class="questionnaire-schedule-detail" id="questionnaireScheduleDetail" hidden>
+          <div class="reception-history-head">
+            <h2 id="questionnaireScheduleTitle">問診回答状況</h2>
+            <button class="ghost" type="button" onclick="this.closest('section').hidden=true">閉じる</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>個人番号</th><th>氏名</th><th>状態</th><th>最終保存</th><th>送信日時</th></tr></thead>
+              <tbody id="questionnaireScheduleRows"></tbody>
+            </table>
+          </div>
+        </section>
         <div class="recovery-layout schedule-recovery">
           <section class="recovery-reader">
             <p class="eyebrow">災害・端末故障時</p>
@@ -780,6 +795,6 @@
     </section>
   </main>
 
-  <script src="./app.js?v=20261105-02" type="module"></script>
+  <script src="./app.js?v=20261105-03" type="module"></script>
 </body>
 </html>

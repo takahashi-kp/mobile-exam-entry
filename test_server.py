@@ -26,6 +26,13 @@ class MergePayloadTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("本人確認".encode(), response.data)
         self.assertIn(b"public-questionnaire.js", response.data)
+        self.assertNotIn("署名".encode(), response.data)
+
+    def test_shared_questionnaire_ready_page_is_served(self):
+        response = app.test_client().get("/questionnaire-ready.html")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("次の方のQRコード".encode(), response.data)
 
     def test_health_reports_sync_schema(self):
         response = app.test_client().get("/healthz")
