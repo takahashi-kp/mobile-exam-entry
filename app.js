@@ -3980,14 +3980,14 @@ async function refreshScheduleRows() {
     const tr = document.createElement("tr");
     tr.className = [active ? "is-active-row" : "", archived ? "is-archived-row" : ""].filter(Boolean).join(" ");
     tr.innerHTML = `
-      <td><input class="schedule-group-name-input" data-schedule-group-field="name" data-schedule-group-id="${group.id}" value="${escapeAttribute(group.name || "")}" placeholder="グループ名" ${disabled}></td>
-      <td><input class="schedule-customer-input" data-schedule-group-field="customerName" data-schedule-group-id="${group.id}" value="${escapeAttribute(group.customerName || "")}" placeholder="顧客名" ${disabled}></td>
-      <td><input class="schedule-date-input" type="date" data-schedule-group-field="scheduledDate" data-schedule-group-id="${group.id}" value="${escapeAttribute(group.scheduledDate || "")}" ${disabled}></td>
-      <td>${escapeHtml(group.fileName)}</td>
-      <td>${escapeHtml(group.recordCount)}</td>
-      <td><span class="questionnaire-status" data-questionnaire-status="${group.id}">確認中</span></td>
-      <td>${formatDate(group.createdAt)}</td>
-      <td class="schedule-row-actions">${archived
+      <td data-label="グループ名"><input class="schedule-group-name-input" data-schedule-group-field="name" data-schedule-group-id="${group.id}" value="${escapeAttribute(group.name || "")}" placeholder="グループ名" ${disabled}></td>
+      <td data-label="顧客名"><input class="schedule-customer-input" data-schedule-group-field="customerName" data-schedule-group-id="${group.id}" value="${escapeAttribute(group.customerName || "")}" placeholder="顧客名" ${disabled}></td>
+      <td data-label="予定日"><input class="schedule-date-input" type="date" data-schedule-group-field="scheduledDate" data-schedule-group-id="${group.id}" value="${escapeAttribute(group.scheduledDate || "")}" ${disabled}></td>
+      <td data-label="ファイル名">${escapeHtml(group.fileName)}</td>
+      <td data-label="レコード数">${escapeHtml(group.recordCount)}</td>
+      <td data-label="事前問診"><span class="questionnaire-status" data-questionnaire-status="${group.id}">確認中</span></td>
+      <td data-label="登録日時">${formatDate(group.createdAt)}</td>
+      <td class="schedule-row-actions" data-label="操作">${archived
         ? `<span class="archive-badge">アーカイブ済み</span><button class="ghost" data-restore-group-id="${group.id}" type="button">復元</button>`
         : `<button class="ghost" data-group-id="${group.id}" type="button">${active ? "選択中" : "開く"}</button><button class="ghost" data-questionnaire-detail="${group.id}" type="button">問診状況</button><button class="ghost" data-questionnaire-pdf="${group.id}" type="button">問診案内PDF</button><button class="danger-ghost" data-archive-group-id="${group.id}" type="button">アーカイブ</button>`}
       </td>

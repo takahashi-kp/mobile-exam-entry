@@ -72,7 +72,8 @@ import java.util.zip.CRC32;
 
 public class MainActivity extends Activity implements NfcAdapter.ReaderCallback {
     private static final String TAG = "MobileExamCamera";
-    private static final String APP_URL = "https://mobile-exam-entry-b6w9-z574.onrender.com/";
+    private static final String APP_VERSION = "0.1.32";
+    private static final String APP_URL = "https://mobile-exam-entry-b6w9-z574.onrender.com/?android=" + APP_VERSION;
     private static final String APP_HOST = "mobile-exam-entry-b6w9-z574.onrender.com";
     private static final int BLOCK_COUNT = 14;
     private static final int SLOT_BLOCKS = 7;
@@ -104,6 +105,11 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
         settings.setMediaPlaybackRequiresUserGesture(false);
         settings.setAllowFileAccess(false);
         settings.setAllowContentAccess(false);
+        String cachedWebVersion = deviceSettings.getString("web_content_version", "");
+        if (!APP_VERSION.equals(cachedWebVersion)) {
+            webView.clearCache(true);
+            deviceSettings.edit().putString("web_content_version", APP_VERSION).apply();
+        }
         if (android.os.Build.VERSION.SDK_INT >= 26) settings.setSafeBrowsingEnabled(true);
         webView.addJavascriptInterface(new FelicaBridge(), "AndroidFelica");
         webView.setWebViewClient(new WebViewClient() {

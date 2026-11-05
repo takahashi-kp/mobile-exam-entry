@@ -2672,6 +2672,81 @@ button:disabled {
 .questionnaire-detail-state.in_progress { background: var(--warn); }
 
 @media (max-width: 760px) {
+  #schedulesView .table-wrap:first-of-type {
+    border: 0;
+    overflow: visible;
+  }
+
+  .schedule-table,
+  .schedule-table tbody,
+  .schedule-table tr,
+  .schedule-table td {
+    display: block;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .schedule-table {
+    min-width: 0;
+  }
+
+  .schedule-table thead {
+    display: none;
+  }
+
+  .schedule-table tr {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    margin-bottom: 12px;
+    overflow: hidden;
+  }
+
+  .schedule-table td {
+    align-items: center;
+    border-bottom: 1px solid var(--line);
+    display: grid;
+    gap: 8px;
+    grid-template-columns: 82px minmax(0, 1fr);
+    padding: 8px 10px;
+  }
+
+  .schedule-table td::before {
+    color: var(--muted);
+    content: attr(data-label);
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .schedule-table .schedule-row-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .schedule-table .schedule-row-actions::before {
+    grid-column: 1 / -1;
+  }
+
+  .schedule-table .schedule-row-actions button {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .schedule-group-name-input,
+  .schedule-customer-input,
+  .schedule-date-input {
+    min-width: 0;
+  }
+
+  .questionnaire-schedule-tools {
+    justify-content: stretch;
+  }
+
+  .questionnaire-schedule-tools .button-link {
+    text-align: center;
+    width: 100%;
+  }
+
   .entry-group-buttons {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
