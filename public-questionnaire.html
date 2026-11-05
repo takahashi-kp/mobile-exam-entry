@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#176c6a">
+  <title>健康診断 問診票</title>
+  <link rel="stylesheet" href="/public-questionnaire.css?v=20261105-01">
+</head>
+<body>
+  <header class="public-header">
+    <p>出張健診</p>
+    <h1>問診票・質問票</h1>
+  </header>
+  <main>
+    <section class="panel" id="verifyPanel">
+      <h2>本人確認</h2>
+      <p>生年月日の月日を4桁で入力してください。</p>
+      <label><span>月日（例：4月5日は0405）</span><input id="birthInput" inputmode="numeric" maxlength="4" autocomplete="bday"></label>
+      <p class="error" id="verifyError" role="alert"></p>
+      <button class="primary" id="verifyButton" type="button">問診を開く</button>
+    </section>
+    <section id="questionnairePanel" hidden>
+      <div class="patient-bar">
+        <div><small id="groupName"></small><strong id="patientName"></strong></div>
+        <span id="saveState">未保存</span>
+      </div>
+      <form id="publicQuestionnaire" novalidate></form>
+      <div class="submit-bar">
+        <button id="saveDraft" type="button">途中保存</button>
+        <button class="primary" id="submitAnswers" type="button">回答を送信</button>
+      </div>
+      <p class="error" id="formError" role="alert"></p>
+    </section>
+    <section class="panel complete" id="completePanel" hidden>
+      <h2>回答を送信しました</h2>
+      <p>ご協力ありがとうございました。この画面を閉じてください。</p>
+      <button id="clearAndClose" type="button">終了</button>
+    </section>
+  </main>
+  <script type="module" src="/public-questionnaire.js?v=20261105-01"></script>
+</body>
+</html>

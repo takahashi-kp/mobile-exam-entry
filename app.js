@@ -3986,13 +3986,15 @@ async function refreshScheduleRows() {
       <td><input class="schedule-date-input" type="date" data-schedule-group-field="scheduledDate" data-schedule-group-id="${group.id}" value="${escapeAttribute(group.scheduledDate || "")}" ${disabled}></td>
       <td>${escapeHtml(group.fileName)}</td>
       <td>${escapeHtml(group.recordCount)}</td>
+      <td><span class="questionnaire-status" data-questionnaire-status="${group.id}">確認中</span></td>
       <td>${formatDate(group.createdAt)}</td>
       <td class="schedule-row-actions">${archived
         ? `<span class="archive-badge">アーカイブ済み</span><button class="ghost" data-restore-group-id="${group.id}" type="button">復元</button>`
-        : `<button class="ghost" data-group-id="${group.id}" type="button">${active ? "選択中" : "開く"}</button><button class="danger-ghost" data-archive-group-id="${group.id}" type="button">アーカイブ</button>`}
+        : `<button class="ghost" data-group-id="${group.id}" type="button">${active ? "選択中" : "開く"}</button><button class="ghost" data-questionnaire-pdf="${group.id}" type="button">問診案内PDF</button><button class="danger-ghost" data-archive-group-id="${group.id}" type="button">アーカイブ</button>`}
       </td>
     `;
     scheduleRows.appendChild(tr);
+    refreshQuestionnaireStatus(group.id);
   }
   scheduleRows.querySelectorAll("[data-schedule-group-field]").forEach((input) => {
     input.addEventListener("change", async () => {
@@ -4012,6 +4014,9 @@ async function refreshScheduleRows() {
       switchView("entry");
     });
   });
+  scheduleRows.querySelectorAll("[data-questionnaire-pdf]").forEach((button) => {
+    button.addEventListener("click", () => downloadQuestionnairePackets(button.dataset.questionnairePdf, button));
+  });
   scheduleRows.querySelectorAll("[data-archive-group-id]").forEach((button) => {
     button.addEventListener("click", async () => {
       if (!(await confirmSaveBeforeLeaving())) return;
@@ -4021,6 +4026,60 @@ async function refreshScheduleRows() {
   scheduleRows.querySelectorAll("[data-restore-group-id]").forEach((button) => {
     button.addEventListener("click", () => restoreScheduleGroup(button.dataset.restoreGroupId));
   });
+}
+
+async function refreshQuestionnaireStatus(groupId) {
+  const target = scheduleRows?.querySelector(`[data-questionnaire-status="${cssEscape(groupId)}"]`);
+  if (!target || !navigator.onLine) {
+    if (target) target.textContent = "オフライン";
+    return;
+  }
+  try {
+    const settings = await getCloudSettings();
+    const apiOrigin = new URL(settings.url, location.href).origin;
+    const response = await fetch(`${apiOrigin}/api/questionnaire/groups/${encodeURIComponent(groupId)}/status`, { headers: cloudHeaders(settings) });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    const submitted = data.counts?.submitted || 0;
+    const progress = data.counts?.in_progress || 0;
+    target.textContent = `${submitted}/${data.total}済${progress ? `・${progress}途中` : ""}`;
+    target.classList.toggle("is-complete", data.total > 0 && submitted === data.total);
+  } catch (_) {
+    target.textContent = "未確認";
+  }
+}
+
+async function downloadQuestionnairePackets(groupId, button) {
+  if (!navigator.onLine) {
+    toast("問診案内PDFの作成にはオンライン接続が必要です", true);
+    return;
+  }
+  if (!window.confirm("このグループの問診専用URLを発行し、案内PDFを作成しますか？\n再作成すると以前のQRコードは無効になります。")) return;
+  button.disabled = true;
+  try {
+    toast("問診案内PDFを作成しています…");
+    await syncPending();
+    const settings = await getCloudSettings();
+    const apiOrigin = new URL(settings.url, location.href).origin;
+    const response = await fetch(`${apiOrigin}/api/questionnaire/groups/${encodeURIComponent(groupId)}/packets.pdf`, {
+      method: "POST",
+      headers: cloudHeaders(settings)
+    });
+    if (!response.ok) {
+      const detail = await response.json().catch(() => ({}));
+      throw new Error(detail.error || `HTTP ${response.status}`);
+    }
+    const disposition = response.headers.get("Content-Disposition") || "";
+    const encodedName = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+    const fileName = encodedName ? decodeURIComponent(encodedName) : "問診案内.pdf";
+    downloadBlob(await response.blob(), fileName);
+    toast("問診案内PDFを作成しました");
+    await refreshQuestionnaireStatus(groupId);
+  } catch (error) {
+    toast(`問診案内PDFを作成できませんでした: ${error.message}`, true);
+  } finally {
+    button.disabled = false;
+  }
 }
 
 async function saveScheduleGroupField(groupId, field, value) {

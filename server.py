@@ -6,6 +6,9 @@ import threading
 import time
 import urllib.error
 import urllib.request
+import hashlib
+import io
+import secrets
 from collections import defaultdict, deque
 from datetime import datetime, timezone
 from pathlib import Path
@@ -16,6 +19,12 @@ from flask import Flask, Response, jsonify, request, send_file, send_from_direct
 from psycopg.rows import dict_row
 
 from roster_export import build_roster
+import qrcode
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import mm
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.cidfonts import UnicodeCIDFont
+from reportlab.pdfgen import canvas
 
 ROOT = Path(__file__).resolve().parent
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
@@ -28,6 +37,7 @@ VISION_RATE_LIMIT = 30
 VISION_RATE_WINDOW_SECONDS = 60
 vision_requests = defaultdict(deque)
 vision_requests_lock = threading.Lock()
+questionnaire_verifications = defaultdict(deque)
 
 app = Flask(__name__, static_folder=None)
 app.config["MAX_CONTENT_LENGTH"] = 8 * 1024 * 1024
@@ -153,6 +163,8 @@ def add_security_headers(response):
     response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    if request.path.startswith("/api/public-questionnaire/") or request.path.startswith("/questionnaire/"):
+        response.headers["Cache-Control"] = "no-store, max-age=0"
     return response
 
 
@@ -198,6 +210,24 @@ def ensure_schema():
             """
         )
         conn.execute("create index if not exists sync_record_history_record_idx on sync_record_history(entity_type, id)")
+        conn.execute(
+            """
+            create table if not exists questionnaire_invitations (
+              token_hash text primary key,
+              group_id text not null,
+              patient_code text not null,
+              status text not null default 'not_started',
+              answers jsonb not null default '{}'::jsonb,
+              verified_at timestamptz,
+              first_saved_at timestamptz,
+              submitted_at timestamptz,
+              updated_at timestamptz not null default now(),
+              expires_at timestamptz,
+              unique (group_id, patient_code)
+            )
+            """
+        )
+        conn.execute("create index if not exists questionnaire_inv_group_idx on questionnaire_invitations(group_id, status)")
         legacy_exists = conn.execute("select to_regclass('public.sync_records') as table_name").fetchone()
         if legacy_exists and legacy_exists["table_name"]:
             conn.execute(
@@ -208,6 +238,258 @@ def ensure_schema():
                 """
             )
     return None
+
+
+def token_hash(token):
+    return hashlib.sha256(str(token or "").encode("utf-8")).hexdigest()
+
+
+def normalize_birth_digits(value):
+    return re.sub(r"\D", "", str(value or ""))
+
+
+def birth_month_day(value):
+    digits = normalize_birth_digits(value)
+    return digits[-4:] if len(digits) >= 4 else ""
+
+
+def schedule_group_and_patients(conn, group_id):
+    group_row = conn.execute(
+        "select payload from sync_records_v2 where entity_type = 'schedule_group' and id = %s",
+        (group_id,),
+    ).fetchone()
+    patients = conn.execute(
+        """
+        select payload from sync_records_v2
+        where entity_type = 'schedule_patient' and payload->>'groupId' = %s
+        order by payload->>'受診者コード'
+        """,
+        (group_id,),
+    ).fetchall()
+    return (group_row["payload"] if group_row else None, [row["payload"] for row in patients])
+
+
+def questionnaire_invitation(conn, token):
+    row = conn.execute(
+        "select * from questionnaire_invitations where token_hash = %s",
+        (token_hash(token),),
+    ).fetchone()
+    if not row:
+        return None, None, None
+    group, patients = schedule_group_and_patients(conn, row["group_id"])
+    patient = next((item for item in patients if str(item.get("受診者コード") or "") == row["patient_code"]), None)
+    return row, group, patient
+
+
+def questionnaire_verified(row, patient, supplied_birth):
+    if not row or not patient:
+        return False
+    if row.get("expires_at") and row["expires_at"] < utc_now():
+        return False
+    expected = birth_month_day(patient.get("生年月日"))
+    supplied = normalize_birth_digits(supplied_birth)[-4:]
+    return bool(expected and secrets.compare_digest(expected, supplied))
+
+
+def questionnaire_verification_key(token):
+    client_ip = request.headers.get("X-Forwarded-For", request.remote_addr or "unknown").split(",")[0].strip()
+    return f"{client_ip}:{token_hash(token)[:16]}"
+
+
+def questionnaire_verification_limited(token):
+    key = questionnaire_verification_key(token)
+    now = time.monotonic()
+    with vision_requests_lock:
+        recent = questionnaire_verifications[key]
+        while recent and now - recent[0] > 600:
+            recent.popleft()
+        return len(recent) >= 10
+
+
+def record_questionnaire_verification_failure(token):
+    key = questionnaire_verification_key(token)
+    with vision_requests_lock:
+        questionnaire_verifications[key].append(time.monotonic())
+
+
+def clear_questionnaire_verification_failures(token):
+    key = questionnaire_verification_key(token)
+    with vision_requests_lock:
+        questionnaire_verifications.pop(key, None)
+
+
+def valid_questionnaire_answers(answers):
+    if not isinstance(answers, dict) or len(answers) > 250:
+        return False
+    for key, value in answers.items():
+        if len(str(key)) > 150:
+            return False
+        values = value if isinstance(value, list) else [value]
+        if len(values) > 10 or any(not isinstance(item, str) or len(item) > 500 for item in values):
+            return False
+    return True
+
+
+@app.route("/api/questionnaire/groups/<group_id>/status", methods=["GET"])
+def questionnaire_group_status(group_id):
+    if not check_auth():
+        return json_response({"error": "Unauthorized"}, 401)
+    db_error = ensure_schema()
+    if db_error:
+        return db_error
+    with connect() as conn:
+        group, patients = schedule_group_and_patients(conn, group_id)
+        if not group:
+            return json_response({"error": "Schedule group not found"}, 404)
+        counts = conn.execute(
+            "select status, count(*) as count from questionnaire_invitations where group_id = %s group by status",
+            (group_id,),
+        ).fetchall()
+    summary = {"not_started": 0, "in_progress": 0, "submitted": 0}
+    summary.update({row["status"]: row["count"] for row in counts})
+    return json_response({"groupId": group_id, "total": len(patients), "counts": summary})
+
+
+@app.route("/api/questionnaire/groups/<group_id>/packets.pdf", methods=["POST"])
+def questionnaire_packets(group_id):
+    if not check_auth():
+        return json_response({"error": "Unauthorized"}, 401)
+    db_error = ensure_schema()
+    if db_error:
+        return db_error
+    base_url = request.host_url.rstrip("/")
+    with connect() as conn:
+        group, patients = schedule_group_and_patients(conn, group_id)
+        if not group:
+            return json_response({"error": "Schedule group not found"}, 404)
+        if not patients:
+            return json_response({"error": "No scheduled patients"}, 400)
+        invitations = []
+        for patient in patients:
+            code = str(patient.get("受診者コード") or "")
+            token = secrets.token_urlsafe(32)
+            conn.execute(
+                """
+                insert into questionnaire_invitations
+                  (token_hash, group_id, patient_code, status, answers, expires_at)
+                values (%s, %s, %s, 'not_started', '{}'::jsonb, now() + interval '90 days')
+                on conflict (group_id, patient_code) do update set
+                  token_hash = excluded.token_hash,
+                  expires_at = excluded.expires_at,
+                  updated_at = now()
+                """,
+                (token_hash(token), group_id, code),
+            )
+            invitations.append((patient, f"{base_url}/questionnaire/{token}"))
+
+    output = io.BytesIO()
+    pdfmetrics.registerFont(UnicodeCIDFont("HeiseiKakuGo-W5"))
+    pdf = canvas.Canvas(output, pagesize=A4)
+    width, height = A4
+    for patient, url in invitations:
+        pdf.setFont("HeiseiKakuGo-W5", 17)
+        pdf.drawString(22 * mm, height - 28 * mm, "健康診断 問診入力のご案内")
+        pdf.setFont("HeiseiKakuGo-W5", 10)
+        pdf.drawString(22 * mm, height - 42 * mm, f"健診名: {group.get('name') or ''}")
+        pdf.drawString(22 * mm, height - 49 * mm, f"受診予定日: {group.get('scheduledDate') or '未定'}")
+        pdf.drawString(22 * mm, height - 56 * mm, f"受診者: {patient.get('氏名') or ''} 様")
+        qr = qrcode.make(url)
+        qr_buffer = io.BytesIO()
+        qr.save(qr_buffer, format="PNG")
+        qr_buffer.seek(0)
+        from reportlab.lib.utils import ImageReader
+        pdf.drawImage(ImageReader(qr_buffer), 58 * mm, height - 132 * mm, 74 * mm, 74 * mm, preserveAspectRatio=True)
+        pdf.setFont("HeiseiKakuGo-W5", 11)
+        pdf.drawCentredString(width / 2, height - 142 * mm, "QRコードをスマートフォンで読み取ってください。")
+        pdf.setFont("HeiseiKakuGo-W5", 9)
+        lines = [
+            "本人確認のため、生年月日の月日4桁を入力します（例: 4月5日 → 0405）。",
+            "健診当日までに送信してください。途中で中断しても同じQRコードから再開できます。",
+            "スマートフォンをお持ちでない場合は、健診会場のタブレットで回答できます。",
+            "この用紙には個人専用URLが含まれます。第三者へ渡さないでください。",
+        ]
+        y = height - 160 * mm
+        for line in lines:
+            pdf.drawString(22 * mm, y, line)
+            y -= 7 * mm
+        pdf.showPage()
+    pdf.save()
+    output.seek(0)
+    safe_name = re.sub(r"[^0-9A-Za-z_-]+", "_", str(group.get("name") or "questionnaire"))
+    return send_file(output, as_attachment=True, download_name=f"問診案内_{safe_name}.pdf", mimetype="application/pdf")
+
+
+@app.route("/api/public-questionnaire/<token>", methods=["GET", "POST"])
+def public_questionnaire(token):
+    db_error = ensure_schema()
+    if db_error:
+        return db_error
+    payload = request.get_json(silent=True) if request.method == "POST" else None
+    birth = (payload or {}).get("birth") if isinstance(payload, dict) else request.args.get("birth", "")
+    with connect() as conn:
+        row, group, patient = questionnaire_invitation(conn, token)
+        if not row:
+            return json_response({"error": "このURLは無効です。"}, 404)
+        if request.method == "GET" and not birth:
+            return json_response({"ok": True, "requiresVerification": True, "status": row["status"]})
+        if questionnaire_verification_limited(token):
+            return json_response({"error": "確認回数が上限に達しました。しばらく待ってからお試しください。"}, 429)
+        if not questionnaire_verified(row, patient, birth):
+            record_questionnaire_verification_failure(token)
+            return json_response({"error": "生年月日の月日が一致しません。"}, 403)
+        clear_questionnaire_verification_failures(token)
+        if request.method == "GET":
+            conn.execute("update questionnaire_invitations set verified_at = coalesce(verified_at, now()), updated_at = now() where token_hash = %s", (token_hash(token),))
+            return json_response({
+                "ok": True,
+                "patient": {"code": patient.get("受診者コード"), "name": patient.get("氏名"), "kana": patient.get("カナ氏名"), "sex": patient.get("性別名称")},
+                "group": {"name": group.get("name"), "scheduledDate": group.get("scheduledDate")},
+                "answers": row["answers"] or {},
+                "status": row["status"],
+            })
+        answers = payload.get("answers")
+        action = payload.get("action")
+        if not valid_questionnaire_answers(answers) or action not in {"save", "submit"}:
+            return json_response({"error": "Invalid questionnaire payload"}, 400)
+        if action == "submit" and (answers.get("問診_同意") != "同意する" or not str(answers.get("問診_署名") or "").strip()):
+            return json_response({"error": "同意と署名を確認してください。"}, 400)
+        status = "submitted" if action == "submit" else "in_progress"
+        conn.execute(
+            """
+            update questionnaire_invitations set answers = %s, status = %s,
+              first_saved_at = coalesce(first_saved_at, now()),
+              submitted_at = case when %s = 'submitted' then now() else submitted_at end,
+              updated_at = now() where token_hash = %s
+            """,
+            (Jsonb(answers), status, status, token_hash(token)),
+        )
+        questionnaire_id = f"{row['group_id']}::{row['patient_code']}::questionnaire"
+        questionnaire_record = {
+            "id": questionnaire_id,
+            "entityType": "questionnaire_response",
+            "scheduleGroupId": row["group_id"],
+            "scheduleGroupName": group.get("name") or "",
+            "patientCode": row["patient_code"],
+            "patientKey": f"{row['group_id']}::{row['patient_code']}",
+            "answers": answers,
+            "status": status,
+            "source": "public_questionnaire",
+            "updatedAt": utc_now().isoformat(),
+        }
+        conn.execute(
+            """
+            insert into sync_records_v2 (id, entity_type, payload, updated_at)
+            values (%s, 'questionnaire_response', %s, now())
+            on conflict (entity_type, id) do update set payload = excluded.payload, updated_at = now()
+            """,
+            (questionnaire_id, Jsonb(questionnaire_record)),
+        )
+    return json_response({"ok": True, "status": status})
+
+
+@app.route("/questionnaire/<token>")
+def public_questionnaire_page(token):
+    return send_from_directory(ROOT, "public-questionnaire.html")
 
 
 @app.route("/api/exam-records", methods=["OPTIONS"])

@@ -2634,6 +2634,19 @@ button:disabled {
   background: #f8faf8;
 }
 
+.questionnaire-status {
+  color: var(--muted);
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  min-width: 82px;
+  white-space: nowrap;
+}
+
+.questionnaire-status.is-complete {
+  color: #176c4b;
+}
+
 @media (max-width: 760px) {
   .entry-group-buttons {
     grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -1,9 +1,23 @@
 import unittest
 
-from server import app, merge_payload
+from server import app, birth_month_day, merge_payload, token_hash, valid_questionnaire_answers
 
 
 class MergePayloadTests(unittest.TestCase):
+    def test_questionnaire_security_helpers(self):
+        self.assertEqual(birth_month_day("1980/04/05"), "0405")
+        self.assertEqual(birth_month_day("1980-04-05"), "0405")
+        self.assertEqual(len(token_hash("sample-token")), 64)
+        self.assertTrue(valid_questionnaire_answers({"問診_同意": "同意する"}))
+        self.assertFalse(valid_questionnaire_answers({"x": "a" * 501}))
+
+    def test_public_questionnaire_page_is_served_without_patient_data(self):
+        response = app.test_client().get("/questionnaire/example-token")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("本人確認".encode(), response.data)
+        self.assertIn(b"public-questionnaire.js", response.data)
+
     def test_health_reports_sync_schema(self):
         response = app.test_client().get("/healthz")
 
