@@ -86,7 +86,7 @@ async function api(method, body){
 }
 async function verify(){
   const birth=birthInput.value.replace(/\D/g,""); document.querySelector("#verifyError").textContent="";
-  if(birth.length!==4){document.querySelector("#verifyError").textContent="月日を4桁で入力してください。";return;}
+  if(![4,6,8].includes(birth.length)){document.querySelector("#verifyError").textContent="月日4桁、年月6桁、または年月日8桁で入力してください。";return;}
   try{
     const response=await fetch(`/api/public-questionnaire/${encodeURIComponent(token)}?birth=${birth}`); const data=await response.json(); if(!response.ok)throw new Error(data.error);
     verifiedBirth=birth; patientSex=data.patient.sex||""; document.querySelector("#patientName").textContent=`${data.patient.kana||""}　${data.patient.name||""} 様`; document.querySelector("#groupName").textContent=`${data.group.name||""}　${data.group.scheduledDate||""}`; render(data.answers); verifyPanel.hidden=true; questionnairePanel.hidden=false; document.querySelector("#saveState").textContent=data.status==="submitted"?"送信済み":"入力中";

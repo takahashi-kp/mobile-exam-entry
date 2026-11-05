@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#176c6a">
   <title>健康診断 問診票</title>
-  <link rel="stylesheet" href="/public-questionnaire.css?v=20261105-01">
+  <link rel="stylesheet" href="/public-questionnaire.css?v=20261105-02">
 </head>
 <body>
   <header class="public-header">
@@ -15,8 +15,8 @@
   <main>
     <section class="panel" id="verifyPanel">
       <h2>本人確認</h2>
-      <p>生年月日の月日を4桁で入力してください。</p>
-      <label><span>月日（例：4月5日は0405）</span><input id="birthInput" inputmode="numeric" maxlength="4" autocomplete="bday"></label>
+      <p>生年月日を数字で入力してください。年月日8桁のほか、年月6桁または月日4桁でも確認できます。</p>
+      <label><span>生年月日（例：1980年4月5日は19800405）</span><input id="birthInput" inputmode="numeric" maxlength="8" autocomplete="bday" placeholder="19800405"></label>
       <p class="error" id="verifyError" role="alert"></p>
       <button class="primary" id="verifyButton" type="button">問診を開く</button>
     </section>
@@ -38,6 +38,6 @@
       <button id="clearAndClose" type="button">終了</button>
     </section>
   </main>
-  <script type="module" src="/public-questionnaire.js?v=20261105-01"></script>
+  <script type="module" src="/public-questionnaire.js?v=20261105-02"></script>
 </body>
 </html>

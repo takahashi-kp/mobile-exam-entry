@@ -253,6 +253,21 @@ def birth_month_day(value):
     return digits[-4:] if len(digits) >= 4 else ""
 
 
+def birth_value_matches(expected_birth, supplied_birth):
+    expected = normalize_birth_digits(expected_birth)
+    supplied = normalize_birth_digits(supplied_birth)
+    if len(expected) < 8:
+        return False
+    expected = expected[-8:]
+    if len(supplied) == 4:
+        return secrets.compare_digest(expected[-4:], supplied)
+    if len(supplied) == 6:
+        return secrets.compare_digest(expected[:6], supplied)
+    if len(supplied) == 8:
+        return secrets.compare_digest(expected, supplied)
+    return False
+
+
 def schedule_group_and_patients(conn, group_id):
     group_row = conn.execute(
         "select payload from sync_records_v2 where entity_type = 'schedule_group' and id = %s",
@@ -286,9 +301,7 @@ def questionnaire_verified(row, patient, supplied_birth):
         return False
     if row.get("expires_at") and row["expires_at"] < utc_now():
         return False
-    expected = birth_month_day(patient.get("生年月日"))
-    supplied = normalize_birth_digits(supplied_birth)[-4:]
-    return bool(expected and secrets.compare_digest(expected, supplied))
+    return birth_value_matches(patient.get("生年月日"), supplied_birth)
 
 
 def questionnaire_verification_key(token):
@@ -403,7 +416,7 @@ def questionnaire_packets(group_id):
         pdf.drawCentredString(width / 2, height - 142 * mm, "QRコードをスマートフォンで読み取ってください。")
         pdf.setFont("HeiseiKakuGo-W5", 9)
         lines = [
-            "本人確認のため、生年月日の月日4桁を入力します（例: 4月5日 → 0405）。",
+            "本人確認では生年月日を数字で入力します（例: 1980年4月5日 → 19800405）。",
             "健診当日までに送信してください。途中で中断しても同じQRコードから再開できます。",
             "スマートフォンをお持ちでない場合は、健診会場のタブレットで回答できます。",
             "この用紙には個人専用URLが含まれます。第三者へ渡さないでください。",
@@ -436,7 +449,7 @@ def public_questionnaire(token):
             return json_response({"error": "確認回数が上限に達しました。しばらく待ってからお試しください。"}, 429)
         if not questionnaire_verified(row, patient, birth):
             record_questionnaire_verification_failure(token)
-            return json_response({"error": "生年月日の月日が一致しません。"}, 403)
+            return json_response({"error": "生年月日が一致しません。入力内容をご確認ください。"}, 403)
         clear_questionnaire_verification_failures(token)
         if request.method == "GET":
             conn.execute("update questionnaire_invitations set verified_at = coalesce(verified_at, now()), updated_at = now() where token_hash = %s", (token_hash(token),))

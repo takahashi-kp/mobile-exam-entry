@@ -1,12 +1,16 @@
 import unittest
 
-from server import app, birth_month_day, merge_payload, token_hash, valid_questionnaire_answers
+from server import app, birth_month_day, birth_value_matches, merge_payload, token_hash, valid_questionnaire_answers
 
 
 class MergePayloadTests(unittest.TestCase):
     def test_questionnaire_security_helpers(self):
         self.assertEqual(birth_month_day("1980/04/05"), "0405")
         self.assertEqual(birth_month_day("1980-04-05"), "0405")
+        self.assertTrue(birth_value_matches("1980/04/05", "0405"))
+        self.assertTrue(birth_value_matches("1980/04/05", "198004"))
+        self.assertTrue(birth_value_matches("1980/04/05", "19800405"))
+        self.assertFalse(birth_value_matches("1980/04/05", "198005"))
         self.assertEqual(len(token_hash("sample-token")), 64)
         self.assertTrue(valid_questionnaire_answers({"問診_同意": "同意する"}))
         self.assertFalse(valid_questionnaire_answers({"x": "a" * 501}))
