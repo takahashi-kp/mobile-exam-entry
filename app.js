@@ -1224,14 +1224,24 @@ async function readFelicaCard() {
 
 async function lookupFelicaBinding(card) {
   const result = await felicaRequest("/binding/lookup", { idm: card.idm });
-  if (result.binding || !card.cardData?.payloadHex || !activeGroup) return result;
+  if (result.binding || !activeGroup) return result;
   try {
-    const payloadHex = String(card.cardData.payloadHex || "");
-    const payload = Uint8Array.from(payloadHex.match(/.{2}/g) || [], (pair) => Number.parseInt(pair, 16));
+    let payload;
+    if (card.cardData?.payloadHex) {
+      const payloadHex = String(card.cardData.payloadHex || "");
+      payload = Uint8Array.from(payloadHex.match(/.{2}/g) || [], (pair) => Number.parseInt(pair, 16));
+    } else {
+      const backup = await felicaRequest("/card/backup", {});
+      if (String(backup.idm || "").toUpperCase() !== String(card.idm || "").toUpperCase()) {
+        throw new Error("読取中に別のカードへ置き換わりました。");
+      }
+      payload = extractFelicaExamPayload(backup.blocks).payload;
+    }
     const decoded = decodeFelicaExamPayload(payload);
     const patients = (await getAll(SCHEDULE_PATIENTS)).filter((patient) => patient.groupId === activeGroup.id);
     const matches = patients.filter((patient) => patientHashFor(activeGroup.id, patient["受診者コード"] || "") === decoded.patientHash);
-    if (matches.length !== 1) return result;
+    if (!matches.length) return { ...result, cardLookupError: "カードに一致する受診者が、選択中の予定グループに見つかりません。" };
+    if (matches.length > 1) return { ...result, cardLookupError: "カードの照合値が複数の受診者と一致しました。" };
     const binding = {
       idm: card.idm,
       patientCode: String(matches[0]["受診者コード"] || ""),
@@ -1239,8 +1249,8 @@ async function lookupFelicaBinding(card) {
     };
     await felicaRequest("/binding/save", { ...binding, overwrite: true });
     return { ...result, binding, rebuiltFromCard: true };
-  } catch {
-    return result;
+  } catch (error) {
+    return { ...result, cardLookupError: error.message || "カード内の受付情報を確認できませんでした。" };
   }
 }
 
@@ -1253,7 +1263,7 @@ async function readFelicaCardAndOpenPatient() {
     const result = await lookupFelicaBinding(card);
     if (!result.binding) {
       await playFelicaFeedback("warning");
-      toast("未登録のカードです。受付画面で受診者を登録してください。", true);
+      toast(result.cardLookupError || "未登録のカードです。受付画面で受診者を登録してください。", true);
       return;
     }
     const currentGroupId = String(activeGroup?.id || "");
