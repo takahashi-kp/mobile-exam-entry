@@ -1339,13 +1339,17 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
             ToneGenerator tone = new ToneGenerator(AudioManager.STREAM_NOTIFICATION, volume);
             Handler handler = new Handler(Looper.getMainLooper());
             if (success) {
+                int duration = 90;
+                tone.startTone(ToneGenerator.TONE_PROP_ACK, duration);
+                handler.postDelayed(tone::release, duration + 140L);
+            } else if ("error".equals(outcome)) {
                 int pulseDuration = 55;
                 tone.startTone(ToneGenerator.TONE_PROP_ACK, pulseDuration);
                 handler.postDelayed(() -> tone.startTone(ToneGenerator.TONE_PROP_ACK, pulseDuration), 125L);
                 handler.postDelayed(() -> tone.startTone(ToneGenerator.TONE_PROP_ACK, pulseDuration), 250L);
                 handler.postDelayed(tone::release, 430L);
             } else {
-                int duration = "warning".equals(outcome) ? 180 : 320;
+                int duration = 180;
                 tone.startTone(ToneGenerator.TONE_PROP_NACK, duration);
                 handler.postDelayed(tone::release, duration + 140L);
             }
