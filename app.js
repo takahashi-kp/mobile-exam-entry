@@ -393,6 +393,7 @@ let rosterExportInProgress = false;
 let activeEntryGroup = "";
 let activeMobileGroup = "視力";
 const mobileDirtyGroups = new Set();
+let mobilePatientChangeActive = false;
 let entryGroupDirty = false;
 let bloodScanQueue = Promise.resolve();
 let nativeBarcodeTarget = "patient";
@@ -2023,6 +2024,8 @@ function isSmartphoneDevice() {
 async function prepareMobileExamView() {
   const code = String(form.elements.namedItem("個人番号")?.value || "").trim();
   if (!code) {
+    mobilePatientChangeActive = false;
+    updateMobileBackButton();
     mobilePatientLookup.hidden = false;
     mobileExamWorkspace.hidden = true;
     requestAnimationFrame(() => mobilePatientCode?.focus());
@@ -2030,6 +2033,8 @@ async function prepareMobileExamView() {
   }
   mobilePatientLookup.hidden = true;
   mobileExamWorkspace.hidden = false;
+  mobilePatientChangeActive = false;
+  updateMobileBackButton();
   hydrateMobilePatientLine();
   hydrateMobileExamFields();
   await selectMobileExamGroup(activeMobileGroup);
@@ -2047,6 +2052,8 @@ async function loadMobilePatient() {
   await loadEntryForPersonalNumber(code);
   mobilePatientLookup.hidden = true;
   mobileExamWorkspace.hidden = false;
+  mobilePatientChangeActive = false;
+  updateMobileBackButton();
   hydrateMobilePatientLine();
   hydrateMobileExamFields();
   await selectMobileExamGroup(activeMobileGroup);
@@ -2055,10 +2062,17 @@ async function loadMobilePatient() {
 function changeMobilePatient() {
   if (mobileDirtyGroups.size && !window.confirm("未確定の検査値を破棄して受診者を変更しますか？")) return;
   mobileDirtyGroups.clear();
+  mobilePatientChangeActive = true;
+  updateMobileBackButton();
   mobileExamWorkspace.hidden = true;
   mobilePatientLookup.hidden = false;
   if (mobilePatientCode) mobilePatientCode.value = "";
   requestAnimationFrame(() => mobilePatientCode?.focus());
+}
+
+function updateMobileBackButton() {
+  const button = document.querySelector("#backFromMobileExam");
+  if (button) button.textContent = mobilePatientChangeActive ? "検査画面へ戻る" : "入力画面へ戻る";
 }
 
 function hydrateMobilePatientLine() {
@@ -2106,6 +2120,8 @@ function hydrateMobileExamFields() {
 async function selectMobileExamGroup(groupKey) {
   if (!MOBILE_EXAM_GROUPS[groupKey]) return;
   activeMobileGroup = groupKey;
+  const title = document.querySelector("#mobileExamTitle");
+  if (title) title.textContent = MOBILE_EXAM_GROUPS[groupKey].label;
   renderMobileCompactPanel(groupKey);
   document.querySelectorAll("[data-mobile-group]").forEach((button) => {
     button.classList.toggle("is-active", button.dataset.mobileGroup === groupKey);
@@ -2155,7 +2171,7 @@ function renderMobileCompactPanel(groupKey) {
   const definition = MOBILE_EXAM_GROUPS[groupKey];
   if (!panel || !definition?.compact) return;
   panel.dataset.mobilePanel = groupKey;
-  panel.innerHTML = `<h2>${escapeHtml(definition.label)}</h2><div class="mobile-compact-grid"></div>`;
+  panel.innerHTML = '<div class="mobile-compact-grid"></div>';
   const grid = panel.querySelector(".mobile-compact-grid");
   definition.fields.forEach((field) => {
     const label = document.createElement("label");
@@ -2285,6 +2301,17 @@ async function returnToEntryMenu(options = {}) {
 }
 
 async function returnFromMobileExam(options = {}) {
+  if (mobilePatientChangeActive && !mobilePatientLookup.hidden) {
+    mobilePatientChangeActive = false;
+    updateMobileBackButton();
+    mobilePatientLookup.hidden = true;
+    mobileExamWorkspace.hidden = false;
+    if (mobilePatientCode) mobilePatientCode.value = form.elements.namedItem("個人番号")?.value || "";
+    hydrateMobilePatientLine();
+    hydrateMobileExamFields();
+    await selectMobileExamGroup(activeMobileGroup);
+    return;
+  }
   if (!(await switchView("entry"))) return;
   showEntryMenu();
   if (!options.fromHistory) replaceExamHistory("entry-menu");

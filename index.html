@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#176c6a">
   <title>出張健診 検査項目入力</title>
   <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="stylesheet" href="./styles.css?v=20261105-04">
+  <link rel="stylesheet" href="./styles.css?v=20261116-01">
 </head>
 <body>
   <div class="app-toast" id="appToast" role="status" aria-live="polite"></div>
@@ -285,10 +285,7 @@
           </div>
 
           <div class="section-block" data-group="身体">
-            <div class="exam-section-heading">
-              <h2>身体計測</h2>
-              <button class="ghost measurement-scan-button" id="scanEntryMeasurements" type="button" aria-label="カメラで身長と体重を読み取る" title="身長・体重をカメラで読み取る" hidden><span aria-hidden="true">📷</span></button>
-            </div>
+            <h2>身体計測</h2>
             <div class="form-grid measure-grid">
               <label>
                 <span>身長</span>
@@ -462,13 +459,15 @@
             <span><small>氏名</small><strong id="mobileIdentityName"></strong></span>
             <span><small>性別</small><strong id="mobileIdentitySex"></strong></span>
             <span><small>生年月日</small><strong id="mobileIdentityBirth"></strong></span>
-            <button class="ghost barcode-scan-button" id="scanMobileWorkspaceBarcode" type="button" aria-label="カメラで個人番号を読み取る" title="カメラ読取" hidden><span aria-hidden="true">📷</span></button>
+          </div>
+
+          <div class="mobile-exam-titlebar">
+            <h2 id="mobileExamTitle">視力</h2>
             <button class="ghost mobile-change-patient" id="changeMobilePatient" type="button">受診者変更</button>
           </div>
 
           <form id="mobileExamForm" autocomplete="off">
             <section class="mobile-exam-panel is-active" data-mobile-panel="視力">
-              <h2>視力</h2>
               <div class="mobile-value-grid vision">
                 <label><span>右 裸眼</span><input data-mobile-field="視力右裸眼" inputmode="decimal" list="visionOptions"></label>
                 <label><span>右 矯正</span><input data-mobile-field="視力右矯正" inputmode="decimal" list="visionOptions"></label>
@@ -478,7 +477,6 @@
             </section>
 
             <section class="mobile-exam-panel" data-mobile-panel="血圧">
-              <h2>血圧</h2>
               <div class="mobile-value-grid blood-pressure">
                 <label><span>1回目 最高</span><input data-mobile-field="1回目最高血圧" inputmode="numeric" maxlength="3"></label>
                 <label><span>1回目 最低</span><input data-mobile-field="1回目最低血圧" inputmode="numeric" maxlength="3"></label>
@@ -488,10 +486,6 @@
             </section>
 
             <section class="mobile-exam-panel" data-mobile-panel="身体">
-              <div class="exam-section-heading">
-                <h2>身体計測</h2>
-                <button class="ghost measurement-scan-button" id="scanMobileMeasurements" type="button" aria-label="カメラで身長と体重を読み取る" title="身長・体重をカメラで読み取る" hidden><span aria-hidden="true">📷</span></button>
-              </div>
               <div class="mobile-value-grid body-measurements">
                 <label><span>身長 <small>cm</small></span><input data-mobile-field="身長" inputmode="decimal"></label>
                 <label><span>体重 <small>kg</small></span><input data-mobile-field="体重" inputmode="decimal"></label>
@@ -795,6 +789,6 @@
     </section>
   </main>
 
-  <script src="./app.js?v=20261109-01" type="module"></script>
+  <script src="./app.js?v=20261116-01" type="module"></script>
 </body>
 </html>

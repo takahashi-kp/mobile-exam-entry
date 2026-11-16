@@ -505,15 +505,26 @@ body.native-android-app[data-view="entry"][data-entry-group="診察"] .entry-com
   font-size: 16px;
 }
 
+.mobile-exam-titlebar {
+  align-items: center;
+  border-bottom: 2px solid #a5b6b1;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  margin: 12px 0 14px;
+  padding-bottom: 8px;
+}
+
+.mobile-exam-titlebar h2 {
+  font-size: 21px;
+  margin: 0;
+}
+
 .mobile-change-patient {
-  box-shadow: -8px 0 10px #eaf1ee;
   flex: 0 0 auto;
-  margin-left: auto;
   min-height: 36px;
   min-width: 104px;
   padding: 6px 10px;
-  position: sticky;
-  right: 0;
   width: auto;
 }
 
