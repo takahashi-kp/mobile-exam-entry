@@ -1345,9 +1345,9 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
             } else if ("error".equals(outcome)) {
                 int pulseDuration = 55;
                 tone.startTone(ToneGenerator.TONE_PROP_ACK, pulseDuration);
-                handler.postDelayed(() -> tone.startTone(ToneGenerator.TONE_PROP_ACK, pulseDuration), 125L);
-                handler.postDelayed(() -> tone.startTone(ToneGenerator.TONE_PROP_ACK, pulseDuration), 250L);
-                handler.postDelayed(tone::release, 430L);
+                handler.postDelayed(() -> tone.startTone(ToneGenerator.TONE_PROP_ACK, pulseDuration), 190L);
+                handler.postDelayed(() -> tone.startTone(ToneGenerator.TONE_PROP_ACK, pulseDuration), 380L);
+                handler.postDelayed(tone::release, 570L);
             } else {
                 int duration = 180;
                 tone.startTone(ToneGenerator.TONE_PROP_NACK, duration);
