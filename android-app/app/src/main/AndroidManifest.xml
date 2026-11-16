@@ -5,7 +5,7 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.nfc" android:required="false" />
-    <application android:allowBackup="false" android:icon="@drawable/app_icon" android:roundIcon="@drawable/app_icon" android:label="出張健診" android:theme="@style/AppTheme" android:usesCleartextTraffic="false">
+    <application android:allowBackup="false" android:icon="@drawable/mobile_exam_icon" android:roundIcon="@drawable/mobile_exam_icon" android:label="出張健診" android:theme="@style/AppTheme" android:usesCleartextTraffic="false">
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

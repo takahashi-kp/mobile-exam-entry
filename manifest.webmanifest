@@ -7,9 +7,9 @@
   "theme_color": "#008c75",
   "icons": [
     {
-      "src": "./karada-portal-app-icon.png",
-      "sizes": "192x192",
-      "type": "image/png"
+      "src": "./mobile-exam-icon.jpg",
+      "sizes": "687x687",
+      "type": "image/jpeg"
     }
   ]
 }
