@@ -4373,8 +4373,10 @@ async function saveSettings() {
   await put(SETTINGS, { key: "cloudUrl", value: document.querySelector("#cloudUrl").value.trim() });
   await put(SETTINGS, { key: "cloudKey", value: document.querySelector("#cloudKey").value.trim() });
   if (window.AndroidFelica?.request) {
+    const successMode = document.querySelector("#feedbackSuccessMode").value;
     await felicaRequest("/feedback/set", {
-      successMode: document.querySelector("#feedbackSuccessMode").value,
+      mode: successMode,
+      successMode,
       errorMode: document.querySelector("#feedbackErrorMode").value,
       vibration: document.querySelector("#feedbackVibration").checked
     });
@@ -4391,9 +4393,10 @@ async function loadSettings() {
     feedbackSetting.hidden = false;
     try {
       const result = await felicaRequest("/feedback/get");
-      document.querySelector("#feedbackSuccessMode").value = result.successMode || "normal";
-      document.querySelector("#feedbackErrorMode").value = result.errorMode || "normal";
-      document.querySelector("#feedbackVibration").checked = result.vibration !== false;
+      const legacyMode = result.mode === "vibration" ? "silent" : result.mode;
+      document.querySelector("#feedbackSuccessMode").value = result.successMode || legacyMode || "normal";
+      document.querySelector("#feedbackErrorMode").value = result.errorMode || legacyMode || "normal";
+      document.querySelector("#feedbackVibration").checked = result.vibration ?? result.mode !== "silent";
     } catch {
       document.querySelector("#feedbackSuccessMode").value = "normal";
       document.querySelector("#feedbackErrorMode").value = "normal";
@@ -4406,8 +4409,10 @@ async function loadSettings() {
 
 async function previewFeedback(outcome) {
   if (!window.AndroidFelica?.request) return;
+  const successMode = document.querySelector("#feedbackSuccessMode").value;
   await felicaRequest("/feedback/set", {
-    successMode: document.querySelector("#feedbackSuccessMode").value,
+    mode: successMode,
+    successMode,
     errorMode: document.querySelector("#feedbackErrorMode").value,
     vibration: document.querySelector("#feedbackVibration").checked
   });
