@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#176c6a">
   <title>出張健診 検査項目入力</title>
   <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="stylesheet" href="./styles.css?v=20261116-01">
+  <link rel="stylesheet" href="./styles.css?v=20261116-02">
 </head>
 <body>
   <div class="app-toast" id="appToast" role="status" aria-live="polite"></div>
@@ -759,16 +759,33 @@
             <span>APIキー</span>
             <input id="cloudKey" type="password" placeholder="任意">
           </label>
-          <label id="cardFeedbackSetting" hidden>
-            <span>カードタッチ確認</span>
-            <select id="cardFeedbackMode">
-              <option value="silent">無音</option>
-              <option value="small">小</option>
-              <option value="normal">標準</option>
-              <option value="large">大</option>
-              <option value="vibration">振動のみ</option>
-            </select>
-          </label>
+          <fieldset id="cardFeedbackSetting" class="feedback-settings" hidden>
+            <legend>カード・バーコード読取音（この端末）</legend>
+            <label>
+              <span>成功音</span>
+              <select id="feedbackSuccessMode">
+                <option value="silent">無音</option>
+                <option value="small">小</option>
+                <option value="normal">標準</option>
+                <option value="large">大</option>
+              </select>
+            </label>
+            <button class="ghost feedback-test" id="testSuccessFeedback" type="button">成功音を試聴</button>
+            <label>
+              <span>失敗音</span>
+              <select id="feedbackErrorMode">
+                <option value="silent">無音</option>
+                <option value="small">小</option>
+                <option value="normal">標準</option>
+                <option value="large">大</option>
+              </select>
+            </label>
+            <button class="ghost feedback-test" id="testErrorFeedback" type="button">失敗音を試聴</button>
+            <label class="feedback-vibration">
+              <input id="feedbackVibration" type="checkbox">
+              <span>振動を使用する</span>
+            </label>
+          </fieldset>
           <div class="sync-actions">
             <button class="primary" id="saveSettings" type="button">設定保存</button>
             <button class="ghost" id="pullCloud" type="button">クラウド読込</button>
@@ -789,6 +806,6 @@
     </section>
   </main>
 
-  <script src="./app.js?v=20261116-01" type="module"></script>
+  <script src="./app.js?v=20261116-02" type="module"></script>
 </body>
 </html>

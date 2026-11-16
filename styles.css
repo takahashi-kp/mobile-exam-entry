@@ -1034,6 +1034,14 @@ body.native-no-nfc #armReceptionCard {
 }
 
 @media (max-width: 640px) {
+  .feedback-settings {
+    grid-template-columns: 1fr;
+  }
+
+  .feedback-settings .feedback-vibration {
+    grid-column: 1;
+  }
+
   #receptionView {
     max-width: 100%;
     min-width: 0;
@@ -2070,6 +2078,44 @@ tr:last-child td {
   display: grid;
   gap: 14px;
   max-width: 720px;
+}
+
+.feedback-settings {
+  align-items: end;
+  background: #f8faf8;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(160px, 1fr) auto;
+  margin: 0;
+  padding: 12px;
+}
+
+.feedback-settings legend {
+  color: var(--ink);
+  font-weight: 700;
+  padding: 0 5px;
+}
+
+.feedback-settings label:not(.feedback-vibration) {
+  display: grid;
+  gap: 5px;
+}
+
+.feedback-test {
+  white-space: nowrap;
+}
+
+.feedback-vibration {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  grid-column: 1 / -1;
+}
+
+.feedback-vibration input {
+  flex: 0 0 auto;
 }
 
 .sync-copy {

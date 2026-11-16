@@ -815,6 +815,8 @@ function bindUi() {
   document.querySelector("#showArchivedSchedules")?.addEventListener("change", refreshScheduleRows);
   document.querySelector("#syncNow").addEventListener("click", syncPending);
   document.querySelector("#saveSettings").addEventListener("click", saveSettings);
+  document.querySelector("#testSuccessFeedback")?.addEventListener("click", () => previewFeedback("success"));
+  document.querySelector("#testErrorFeedback")?.addEventListener("click", () => previewFeedback("error"));
   document.querySelector("#pullCloud").addEventListener("click", pullCloud);
   document.querySelector("#deleteSyncedLocal").addEventListener("click", deleteSyncedLocalData);
   Object.values(guidanceFields).forEach((field) => field?.addEventListener("input", updateGuidanceSelection));
@@ -4371,7 +4373,11 @@ async function saveSettings() {
   await put(SETTINGS, { key: "cloudUrl", value: document.querySelector("#cloudUrl").value.trim() });
   await put(SETTINGS, { key: "cloudKey", value: document.querySelector("#cloudKey").value.trim() });
   if (window.AndroidFelica?.request) {
-    await felicaRequest("/feedback/set", { mode: document.querySelector("#cardFeedbackMode").value });
+    await felicaRequest("/feedback/set", {
+      successMode: document.querySelector("#feedbackSuccessMode").value,
+      errorMode: document.querySelector("#feedbackErrorMode").value,
+      vibration: document.querySelector("#feedbackVibration").checked
+    });
   }
   toast("同期設定を保存しました");
   if (navigator.onLine) await syncPending();
@@ -4385,13 +4391,27 @@ async function loadSettings() {
     feedbackSetting.hidden = false;
     try {
       const result = await felicaRequest("/feedback/get");
-      document.querySelector("#cardFeedbackMode").value = result.mode || "normal";
+      document.querySelector("#feedbackSuccessMode").value = result.successMode || "normal";
+      document.querySelector("#feedbackErrorMode").value = result.errorMode || "normal";
+      document.querySelector("#feedbackVibration").checked = result.vibration !== false;
     } catch {
-      document.querySelector("#cardFeedbackMode").value = "normal";
+      document.querySelector("#feedbackSuccessMode").value = "normal";
+      document.querySelector("#feedbackErrorMode").value = "normal";
+      document.querySelector("#feedbackVibration").checked = true;
     }
   } else {
     feedbackSetting.hidden = true;
   }
+}
+
+async function previewFeedback(outcome) {
+  if (!window.AndroidFelica?.request) return;
+  await felicaRequest("/feedback/set", {
+    successMode: document.querySelector("#feedbackSuccessMode").value,
+    errorMode: document.querySelector("#feedbackErrorMode").value,
+    vibration: document.querySelector("#feedbackVibration").checked
+  });
+  await playFelicaFeedback(outcome);
 }
 
 async function syncPending() {

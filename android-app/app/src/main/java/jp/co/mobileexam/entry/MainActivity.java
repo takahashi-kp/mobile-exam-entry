@@ -175,8 +175,8 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
                     case "/card/write": return writeCard(body).toString();
                     case "/binding/lookup": return lookupBinding(body.optString("idm")).toString();
                     case "/binding/save": return saveBinding(body).toString();
-                    case "/feedback/get": return ok().put("mode", feedbackMode()).toString();
-                    case "/feedback/set": return saveFeedbackMode(body.optString("mode")).toString();
+                    case "/feedback/get": return feedbackSettings().toString();
+                    case "/feedback/set": return saveFeedbackSettings(body).toString();
                     case "/feedback/play": playCardFeedback(body.optString("outcome")); return ok().toString();
                     case "/barcode/scan": startBarcodeScan(); return ok().put("started", true).toString();
                     case "/measurement/scan": startMeasurementScan(); return ok().put("started", true).toString();
@@ -193,7 +193,7 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
                 IntentIntegrator scanner = new IntentIntegrator(this);
                 scanner.setDesiredBarcodeFormats(IntentIntegrator.ALL_CODE_TYPES);
                 scanner.setPrompt("受診票の個人番号バーコードを枠内に合わせてください");
-                scanner.setBeepEnabled(true);
+                scanner.setBeepEnabled(false);
                 scanner.setBarcodeImageEnabled(false);
                 scanner.setOrientationLocked(true);
                 scanner.setCaptureActivity(RetryBarcodeActivity.class);
@@ -1275,25 +1275,45 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
         dispatchWebEvent(eventName, detail);
     }
 
-    private String feedbackMode() {
-        return deviceSettings.getString("card_feedback", "normal");
+    private JSONObject feedbackSettings() throws Exception {
+        String legacy = deviceSettings.getString("card_feedback", "normal");
+        String successMode = deviceSettings.getString("feedback_success", null);
+        String errorMode = deviceSettings.getString("feedback_error", null);
+        boolean vibration = deviceSettings.contains("feedback_vibration")
+            ? deviceSettings.getBoolean("feedback_vibration", true)
+            : !"silent".equals(legacy);
+        if (successMode == null) successMode = "vibration".equals(legacy) ? "silent" : legacy;
+        if (errorMode == null) errorMode = "vibration".equals(legacy) ? "silent" : legacy;
+        return ok().put("successMode", successMode).put("errorMode", errorMode).put("vibration", vibration);
     }
 
-    private JSONObject saveFeedbackMode(String mode) throws Exception {
-        if (!Arrays.asList("silent", "small", "normal", "large", "vibration").contains(mode)) {
-            throw new Exception("カード確認音の設定値が不正です。");
+    private JSONObject saveFeedbackSettings(JSONObject body) throws Exception {
+        String successMode = body.optString("successMode", "normal");
+        String errorMode = body.optString("errorMode", "normal");
+        boolean vibration = body.optBoolean("vibration", true);
+        if (!Arrays.asList("silent", "small", "normal", "large").contains(successMode)
+            || !Arrays.asList("silent", "small", "normal", "large").contains(errorMode)) {
+            throw new Exception("読取音の設定値が不正です。");
         }
-        if (!deviceSettings.edit().putString("card_feedback", mode).commit()) {
-            throw new Exception("カード確認音の設定を保存できませんでした。");
+        if (!deviceSettings.edit()
+            .putString("feedback_success", successMode)
+            .putString("feedback_error", errorMode)
+            .putBoolean("feedback_vibration", vibration)
+            .commit()) {
+            throw new Exception("読取音の設定を保存できませんでした。");
         }
-        return ok().put("mode", mode);
+        return feedbackSettings();
     }
 
     private void playCardFeedback(String outcome) {
-        String mode = feedbackMode();
-        if ("silent".equals(mode)) return;
+        JSONObject settings;
+        try { settings = feedbackSettings(); }
+        catch (Exception ignored) { return; }
+        boolean success = "success".equals(outcome);
+        String mode = settings.optString(success ? "successMode" : "errorMode", "normal");
+        boolean vibrationEnabled = settings.optBoolean("vibration", true);
         Vibrator vibrator = getSystemService(Vibrator.class);
-        if (vibrator != null && vibrator.hasVibrator()) {
+        if (vibrationEnabled && vibrator != null && vibrator.hasVibrator()) {
             if ("success".equals(outcome)) {
                 vibrator.vibrate(VibrationEffect.createOneShot(45, VibrationEffect.DEFAULT_AMPLITUDE));
             } else if ("warning".equals(outcome)) {
@@ -1302,7 +1322,7 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
                 vibrator.vibrate(VibrationEffect.createOneShot(220, VibrationEffect.DEFAULT_AMPLITUDE));
             }
         }
-        if ("vibration".equals(mode)) return;
+        if ("silent".equals(mode)) return;
         int volume = "small".equals(mode) ? 25 : "large".equals(mode) ? 100 : 60;
         try {
             ToneGenerator tone = new ToneGenerator(AudioManager.STREAM_NOTIFICATION, volume);
