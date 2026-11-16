@@ -19,10 +19,12 @@ import android.nfc.NfcAdapter;
 import android.nfc.Tag;
 import android.nfc.tech.NfcF;
 import android.os.Bundle;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
+import android.os.VibratorManager;
 import android.provider.MediaStore;
 import android.util.Log;
 import android.util.Base64;
@@ -1312,14 +1314,23 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
         boolean success = "success".equals(outcome);
         String mode = settings.optString(success ? "successMode" : "errorMode", "normal");
         boolean vibrationEnabled = settings.optBoolean("vibration", true);
-        Vibrator vibrator = getSystemService(Vibrator.class);
+        Vibrator vibrator;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            VibratorManager manager = getSystemService(VibratorManager.class);
+            vibrator = manager == null ? null : manager.getDefaultVibrator();
+        } else {
+            vibrator = getSystemService(Vibrator.class);
+        }
         if (vibrationEnabled && vibrator != null && vibrator.hasVibrator()) {
             if ("success".equals(outcome)) {
-                vibrator.vibrate(VibrationEffect.createOneShot(45, VibrationEffect.DEFAULT_AMPLITUDE));
+                vibrator.vibrate(VibrationEffect.createWaveform(
+                    new long[]{0, 90, 55, 90}, new int[]{0, 210, 0, 255}, -1));
             } else if ("warning".equals(outcome)) {
-                vibrator.vibrate(VibrationEffect.createWaveform(new long[]{0, 70, 60, 70}, -1));
+                vibrator.vibrate(VibrationEffect.createWaveform(
+                    new long[]{0, 130, 80, 130}, new int[]{0, 230, 0, 230}, -1));
             } else {
-                vibrator.vibrate(VibrationEffect.createOneShot(220, VibrationEffect.DEFAULT_AMPLITUDE));
+                vibrator.vibrate(VibrationEffect.createWaveform(
+                    new long[]{0, 320, 100, 180}, new int[]{0, 255, 0, 255}, -1));
             }
         }
         if ("silent".equals(mode)) return;
