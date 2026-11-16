@@ -1022,15 +1022,17 @@ async function startNativeBarcodeScan(event) {
   }
 }
 
-function handleAndroidBarcodeError(event) {
+async function handleAndroidBarcodeError(event) {
   nativeBarcodeTarget = "patient";
   const detail = String(event.detail?.text || "").trim();
+  await playFelicaFeedback("error");
   toast(detail || "カメラを起動できませんでした。ほかのカメラアプリを閉じて、もう一度お試しください。", true);
 }
 
 async function handleAndroidBarcodeScanned(event) {
   const code = String(event.detail?.text || "").trim();
   if (!code) {
+    await playFelicaFeedback("error");
     toast("バーコードを読み取れませんでした。", true);
     return;
   }
@@ -1038,9 +1040,10 @@ async function handleAndroidBarcodeScanned(event) {
   nativeBarcodeTarget = "patient";
   if (target === "blood-tube" && document.body.dataset.view === "entry" && activeEntryGroup === "採血") {
     if (bloodTubeBarcode) bloodTubeBarcode.value = code;
-    queueBloodTubeBarcode(code);
+    await queueBloodTubeBarcode(code);
     return;
   }
+  await playFelicaFeedback("success");
   const view = document.body.dataset.view;
   if (view === "reception") {
     receptionPatientCode.value = code;
@@ -2562,6 +2565,7 @@ function queueBloodTubeBarcode(code) {
       if (bloodTubeBarcode) bloodTubeBarcode.value = "";
       requestAnimationFrame(() => bloodTubeBarcode?.focus());
     });
+  return bloodScanQueue;
 }
 
 async function processBloodTubeBarcode(scannedCode) {
@@ -2577,6 +2581,7 @@ async function processBloodTubeBarcode(scannedCode) {
     });
     renderBloodConfirmationLog();
     showBloodBarcodeError("エラー　番号が一致しません");
+    await playFelicaFeedback("error");
     await updateEntryVerificationUi();
     return;
   }
@@ -2601,6 +2606,7 @@ async function processBloodTubeBarcode(scannedCode) {
     verificationStatus: "confirmed"
   });
   if (saved) {
+    await playFelicaFeedback("success");
     entryGroupDirty = false;
     renderBloodConfirmationLog();
     await updateEntryVerificationUi();

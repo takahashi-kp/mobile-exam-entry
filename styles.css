@@ -1,13 +1,14 @@
 :root {
   color-scheme: light;
-  --bg: #f6f7f3;
+  --bg: #f5f7f6;
   --panel: #ffffff;
-  --ink: #18302f;
-  --muted: #647371;
-  --line: #d9e0dc;
-  --accent: #176c6a;
-  --accent-2: #c35d35;
-  --soft: #e8f0ed;
+  --ink: #2a2a2a;
+  --muted: #74777f;
+  --line: #dcdedf;
+  --accent: #008c75;
+  --accent-strong: #007663;
+  --accent-2: #00978e;
+  --soft: #f2fae8;
   --warn: #fff3d8;
   --bad: #ffe6e1;
   font-family: "Yu Gothic UI", "Meiryo", system-ui, sans-serif;
@@ -59,7 +60,7 @@ body.smartphone-device[data-view="entry"][data-entry-mode="menu"] .patient-stick
 }
 
 .app-toast {
-  background: #173f3e;
+  background: #006f62;
   bottom: max(16px, env(safe-area-inset-bottom));
   border-radius: 8px;
   box-shadow: 0 8px 28px rgba(0, 0, 0, .2);
@@ -129,8 +130,21 @@ textarea {
   padding: 14px clamp(16px, 4vw, 32px);
 }
 
+.app-brand {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 10px;
+}
+
+.app-brand-icon {
+  height: 38px;
+  object-fit: contain;
+  width: 34px;
+}
+
 .eyebrow {
-  color: var(--accent-2);
+  color: var(--accent);
   font-size: 12px;
   font-weight: 700;
   margin: 0 0 2px;
@@ -257,7 +271,7 @@ body:not([data-view="entry"]):not([data-view="questionnaire"]) .patient-sticky {
 }
 
 .workspace {
-  background: #eef3f1;
+  background: #f2f3f5;
   border: 1px solid var(--line);
   border-radius: 8px;
   margin: 0 auto;
@@ -309,10 +323,10 @@ body:not([data-view="entry"]):not([data-view="questionnaire"]) .patient-sticky {
 }
 
 button {
-  border: 1px solid #9eaaa6;
+  border: 1px solid #b8c1be;
   border-radius: 7px;
-  background: linear-gradient(#ffffff, #eef3f1);
-  box-shadow: 0 1px 2px rgba(24, 48, 47, .18), inset 0 1px 0 rgba(255, 255, 255, .9);
+  background: linear-gradient(#ffffff, #f2f3f5);
+  box-shadow: 0 1px 2px rgba(42, 42, 42, .16), inset 0 1px 0 rgba(255, 255, 255, .9);
   cursor: pointer;
   min-height: 38px;
   padding: 8px 13px;
@@ -324,14 +338,14 @@ button:active {
 }
 
 button.primary {
-  background: linear-gradient(#21827f, var(--accent));
+  background: linear-gradient(#0aaca2, var(--accent));
   border-color: var(--accent);
   color: #fff;
   font-weight: 700;
 }
 
 button.ghost {
-  background: linear-gradient(#ffffff, #f1f4f3);
+  background: linear-gradient(#ffffff, #f2f3f5);
   color: var(--ink);
 }
 
@@ -542,7 +556,7 @@ body.native-android-app[data-view="entry"][data-entry-group="診察"] .entry-com
 }
 
 .mobile-exam-tabs button.is-active {
-  background: linear-gradient(#267d76, #176c6a);
+  background: linear-gradient(#0aaca2, var(--accent));
   border-color: #125c5a;
   color: #fff;
 }
@@ -630,7 +644,7 @@ body.native-android-app[data-view="entry"][data-entry-group="診察"] .entry-com
 }
 
 .mobile-value-grid input:focus {
-  border-color: #176c6a;
+  border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(23, 108, 106, .18);
   outline: 0;
 }
@@ -680,7 +694,7 @@ body.native-android-app[data-view="entry"][data-entry-group="診察"] .entry-com
 .mobile-compact-grid input:focus,
 .mobile-compact-grid select:focus,
 .mobile-compact-grid textarea:focus {
-  border-color: #176c6a;
+  border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(23, 108, 106, .18);
   outline: 0;
 }
@@ -764,7 +778,7 @@ body.native-android-app[data-view="entry"][data-entry-group="診察"] .entry-com
 }
 
 .mobile-confirm-button {
-  background: linear-gradient(#2c8d7f, #176c6a);
+  background: linear-gradient(#0aaca2, var(--accent));
   border-color: #125c5a;
   color: #fff;
   font-size: 22px;
@@ -1303,8 +1317,8 @@ body[data-view="mobile"] #newRecord {
 }
 
 .confirm-entry-button {
-  background: linear-gradient(#2c8d7f, #176c6a);
-  border-color: #176c6a;
+  background: linear-gradient(#0aaca2, var(--accent));
+  border-color: var(--accent);
   color: #fff;
   font-weight: 800;
 }
