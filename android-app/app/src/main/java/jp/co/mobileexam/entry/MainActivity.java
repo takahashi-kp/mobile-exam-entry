@@ -1337,10 +1337,18 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
         int volume = "small".equals(mode) ? 25 : "large".equals(mode) ? 100 : 60;
         try {
             ToneGenerator tone = new ToneGenerator(AudioManager.STREAM_NOTIFICATION, volume);
-            int toneType = "success".equals(outcome) ? ToneGenerator.TONE_PROP_ACK : ToneGenerator.TONE_PROP_NACK;
-            int duration = "success".equals(outcome) ? 80 : "warning".equals(outcome) ? 150 : 240;
-            tone.startTone(toneType, duration);
-            new Handler(Looper.getMainLooper()).postDelayed(tone::release, duration + 120L);
+            Handler handler = new Handler(Looper.getMainLooper());
+            if (success) {
+                int pulseDuration = 55;
+                tone.startTone(ToneGenerator.TONE_PROP_ACK, pulseDuration);
+                handler.postDelayed(() -> tone.startTone(ToneGenerator.TONE_PROP_ACK, pulseDuration), 125L);
+                handler.postDelayed(() -> tone.startTone(ToneGenerator.TONE_PROP_ACK, pulseDuration), 250L);
+                handler.postDelayed(tone::release, 430L);
+            } else {
+                int duration = "warning".equals(outcome) ? 180 : 320;
+                tone.startTone(ToneGenerator.TONE_PROP_NACK, duration);
+                handler.postDelayed(tone::release, duration + 140L);
+            }
         } catch (RuntimeException ignored) {
             // Vibration still confirms the read when audio output is unavailable.
         }
