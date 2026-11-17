@@ -879,6 +879,19 @@ body.native-no-nfc #armReceptionCard {
   min-height: 48px;
 }
 
+#receptionPatientCode::placeholder {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 400;
+  opacity: 1;
+}
+
+#scanReceptionBarcode span {
+  display: block;
+  font-size: 24px;
+  line-height: 1;
+}
+
 .reception-patient {
   background: #fff;
   border: 2px solid #4e7774;
