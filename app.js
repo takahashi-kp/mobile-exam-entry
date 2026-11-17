@@ -428,6 +428,7 @@ async function init() {
   checkFelicaHelper();
   await loadSettings();
   await prepareSyncSchemaV2();
+  await prepareReceptionSync();
   if (navigator.onLine) await syncAndRefresh({ force: true });
   await loadActiveGroup();
   await refreshScheduleRows();
@@ -1603,9 +1604,10 @@ async function saveReception(method, cardIdm) {
     firstReceivedAt: existing?.firstReceivedAt || now,
     deviceId: await getSyncDeviceId(),
     updatedAt: now,
-    syncState: "local"
+    syncState: "pending"
   });
   await refreshReceptionRows();
+  if (navigator.onLine) syncAndRefresh({ force: true }).catch(() => {});
 }
 
 function receptionId(patientCode) {
@@ -1775,7 +1777,7 @@ async function recoverFromFelicaCard() {
       patientKana: patientData["カナ氏名"] || "", sex: patientData["性別名称"] || "",
       birthDate: patientData["生年月日"] || "", method: "felica", cardIdm, receivedAt: now,
       receivedDate: localIsoDate(new Date()), firstReceivedAt: now,
-      deviceId: await getSyncDeviceId(), updatedAt: now, syncState: "local"
+      deviceId: await getSyncDeviceId(), updatedAt: now, syncState: "pending"
     });
     recoveredCardVersions.add(versionKey);
     recoveryResults.unshift({ time: now, patientCode, name: patientData["氏名"] || "", groups: decoded.groupValues.length, card: cardIdm.slice(-4), result: "復元済" });
@@ -4483,13 +4485,15 @@ async function syncPending() {
   const pendingQuestionnaires = (await getAll(QUESTIONNAIRE_RESPONSES)).filter((item) => item.syncState !== "synced");
   const pendingScheduleGroups = (await getAll(SCHEDULE_GROUPS)).filter((item) => item.syncState !== "synced");
   const pendingSchedulePatients = (await getAll(SCHEDULE_PATIENTS)).filter((item) => item.syncState !== "synced");
+  const pendingReceptions = (await getAll(RECEPTIONS)).filter((item) => item.syncState !== "synced");
   const pending = [
     ...pendingRecords,
     ...pendingGroups,
     ...pendingProgress,
     ...pendingQuestionnaires,
     ...pendingScheduleGroups,
-    ...pendingSchedulePatients
+    ...pendingSchedulePatients,
+    ...pendingReceptions
   ];
   for (const item of pending) {
     try {
@@ -4507,7 +4511,8 @@ async function syncPending() {
     ...(await getAll(PROGRESS_SUMMARIES)),
     ...(await getAll(QUESTIONNAIRE_RESPONSES)),
     ...(await getAll(SCHEDULE_GROUPS)),
-    ...(await getAll(SCHEDULE_PATIENTS))
+    ...(await getAll(SCHEDULE_PATIENTS)),
+    ...(await getAll(RECEPTIONS))
   ].filter((item) => item.syncState === "error").length;
   syncMessage.textContent = failed ? `${failed}件の同期に失敗しました。URLとAPIキーを確認してください。` : "同期が完了しました。";
   } finally {
@@ -4579,6 +4584,7 @@ function getSyncStoreName(item) {
   if (entityType === "schedule_patient") return SCHEDULE_PATIENTS;
   if (entityType === "exam_group_value") return EXAM_GROUP_VALUES;
   if (entityType === "progress_summary") return PROGRESS_SUMMARIES;
+  if (entityType === "reception") return RECEPTIONS;
   if (entityType === "record_header") return STORE;
   return null;
 }
@@ -4645,6 +4651,7 @@ async function pullCloud(options = {}) {
     await loadActiveGroup();
     await refreshScheduleRows();
     await refreshRows();
+    await refreshReceptionRows();
     if (!silent) toast(`${imported}件を読み込みました`);
   } catch (error) {
     if (!silent) toast(`クラウド読込に失敗しました: ${error.message}`, true);
@@ -4730,6 +4737,22 @@ async function prepareSyncSchemaV2() {
         lastSyncError: ""
       });
     }
+  }
+  await put(SETTINGS, { key: migrationKey, value: true });
+}
+
+async function prepareReceptionSync() {
+  const migrationKey = "receptionSyncV1Reseeded";
+  if ((await getOne(SETTINGS, migrationKey))?.value) return;
+  const items = await getAll(RECEPTIONS);
+  for (const item of items) {
+    await put(RECEPTIONS, {
+      ...item,
+      entityType: "reception",
+      receivedDate: receptionDate(item),
+      syncState: "pending",
+      lastSyncError: ""
+    });
   }
   await put(SETTINGS, { key: migrationKey, value: true });
 }
