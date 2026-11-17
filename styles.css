@@ -846,7 +846,7 @@ body.native-android-app[data-view="entry"][data-entry-group="診察"] .entry-com
 .reception-code-field > div {
   display: grid;
   gap: 8px;
-  grid-template-columns: minmax(180px, 1fr) max-content max-content;
+  grid-template-columns: minmax(180px, 1fr) 44px max-content;
 }
 
 .barcode-scan-button[hidden] {
@@ -1095,6 +1095,10 @@ body.native-no-nfc #armReceptionCard {
     grid-template-columns: 1fr;
   }
 
+  .reception-code-field > div {
+    grid-template-columns: minmax(0, 1fr) 44px;
+  }
+
   .reception-code-field input {
     min-width: 0;
     width: 100%;
@@ -1107,6 +1111,21 @@ body.native-no-nfc #armReceptionCard {
     padding: 9px 10px;
     white-space: normal;
     width: 100%;
+  }
+
+  .reception-code-field #scanReceptionBarcode {
+    grid-column: 2;
+    grid-row: 1;
+    height: 44px;
+    min-height: 44px;
+    min-width: 44px;
+    padding: 0;
+    width: 44px;
+  }
+
+  .reception-code-field #lookupReceptionPatient {
+    grid-column: 1 / -1;
+    grid-row: 2;
   }
 
   .reception-history .table-wrap {

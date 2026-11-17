@@ -8,7 +8,7 @@
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" href="./mobile-exam-icon-transparent.png?v=20261116-01" type="image/png">
   <link rel="apple-touch-icon" href="./mobile-exam-icon-transparent.png?v=20261116-01">
-  <link rel="stylesheet" href="./styles.css?v=20261116-04">
+  <link rel="stylesheet" href="./styles.css?v=20261117-01">
 </head>
 <body>
   <div class="app-toast" id="appToast" role="status" aria-live="polite"></div>
@@ -520,8 +520,8 @@
               <span>個人番号</span>
               <div>
                 <input id="receptionPatientCode" inputmode="numeric" autocomplete="off" placeholder="バーコード読取または手入力">
-                <button class="primary" id="lookupReceptionPatient" type="button">受診者を表示</button>
                 <button class="ghost barcode-scan-button" id="scanReceptionBarcode" type="button" aria-label="カメラで個人番号を読み取る" title="カメラ読取" hidden><span aria-hidden="true">📷</span></button>
+                <button class="primary" id="lookupReceptionPatient" type="button">受診者を表示</button>
               </div>
             </label>
             <div class="reception-patient" id="receptionPatient" hidden>
