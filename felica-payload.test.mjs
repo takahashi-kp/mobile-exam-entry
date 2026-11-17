@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { bytesToHex, decodeFelicaExamPayload, encodeFelicaExamPayload, extractFelicaExamPayload, inspectFelicaExamPayload, patientHashFor } from "./felica-payload.mjs";
+import { bytesToHex, decodeFelicaExamPayload, encodeFelicaExamPayload, eventHashFor, extractFelicaExamPayload, inspectFelicaExamPayload, patientHashFor } from "./felica-payload.mjs";
 
 test("confirmed exam groups fit into one FeliCa payload", () => {
   const confirmed = (groupKey, values) => ({ groupKey, values, verificationStatus: "confirmed", confirmedAt: "2026-09-28T01:02:00.000Z" });
   const payload = encodeFelicaExamPayload({
     groupId: "visit-1",
     patientCode: "2026071501",
+    scheduledDate: "2026-09-28",
     groupValues: [
       confirmed("便区分", { "便区分": "2回" }),
       confirmed("視力", { "視力右裸眼": "1.2", "視力右矯正": "1.5", "視力左裸眼": "0.8", "視力左矯正": "2.0" }),
@@ -23,15 +24,25 @@ test("confirmed exam groups fit into one FeliCa payload", () => {
   });
   const decoded = inspectFelicaExamPayload(payload);
   assert.ok(payload.length <= 96);
-  assert.equal(payload.length, 75);
+  assert.equal(payload.length, 81);
   assert.equal(decoded.groups.length, 11);
   assert.equal(decoded.confirmedBitmap, 0x7ff);
   assert.match(bytesToHex(payload), /^[0-9A-F]+$/);
   const restored = decodeFelicaExamPayload(payload);
   assert.equal(restored.patientHash, patientHashFor("visit-1", "2026071501"));
+  assert.equal(restored.eventHash, eventHashFor("visit-1"));
+  assert.equal(restored.scheduledDate, "2026-09-28");
   assert.equal(restored.groupValues.find((item) => item.groupKey === "身体").values["身長"], "170.1");
   assert.equal(restored.groupValues.find((item) => item.groupKey === "血圧").values["1回目最高血圧"], "120");
   assert.equal(restored.groupValues.find((item) => item.groupKey === "診察").values["その他"], "要受診");
+});
+
+test("legacy version 1 cards remain readable", () => {
+  const legacy = Uint8Array.from([0x4d, 0x45, 0x50, 0x31, 1, 0xfc, 0xd9, 0xb8, 0x82, 0, 0, 0, 0, 0, 0]);
+  const decoded = inspectFelicaExamPayload(legacy);
+  assert.equal(decoded.version, 1);
+  assert.equal(decoded.eventHash, null);
+  assert.equal(decoded.scheduledDate, "");
 });
 
 test("draft groups are not written to the card", () => {

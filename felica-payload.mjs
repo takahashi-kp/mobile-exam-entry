@@ -18,13 +18,13 @@ const GROUPS = [
 const URINE_VALUES = ["", "－", "±", "＋", "＋＋", "＋＋＋"];
 const FINDING_VALUES = ["", "放置可", "要観察", "要受診"];
 
-export function encodeFelicaExamPayload({ groupId = "", patientCode = "", groupValues = [] }) {
+export function encodeFelicaExamPayload({ groupId = "", patientCode = "", scheduledDate = "", groupValues = [] }) {
   const confirmed = new Map(
     groupValues
       .filter((item) => item?.verificationStatus === "confirmed")
       .map((item) => [item.groupKey, item])
   );
-  const bytes = [...MAGIC, 1];
+  const bytes = [...MAGIC, 2];
   pushU32(bytes, fnv1a(`${groupId}::${patientCode}`));
   const latestTime = Math.max(0, ...Array.from(confirmed.values()).map((item) => Date.parse(item.confirmedAt || item.updatedAt || "") || 0));
   pushU32(bytes, Math.floor(latestTime / 60000));
@@ -33,6 +33,8 @@ export function encodeFelicaExamPayload({ groupId = "", patientCode = "", groupV
     if (confirmed.has(key)) bitmap |= (1 << index);
   });
   pushU16(bytes, bitmap);
+  pushU32(bytes, eventHashFor(groupId));
+  pushU16(bytes, encodeScheduledDate(scheduledDate));
   for (const [key, id, encoder] of GROUPS) {
     const item = confirmed.get(key);
     if (!item) continue;
@@ -49,6 +51,10 @@ export function bytesToHex(bytes) {
 
 export function patientHashFor(groupId, patientCode) {
   return fnv1a(`${groupId || ""}::${patientCode || ""}`);
+}
+
+export function eventHashFor(groupId) {
+  return fnv1a(String(groupId || ""));
 }
 
 export function extractFelicaExamPayload(blocks) {
@@ -81,8 +87,11 @@ export function decodeFelicaExamPayload(bytes) {
 export function inspectFelicaExamPayload(bytes) {
   const data = bytes instanceof Uint8Array ? bytes : Uint8Array.from(bytes);
   if (data.length < 15 || !MAGIC.every((value, index) => data[index] === value)) throw new Error("カード用健診データの形式が不正です。");
+  const version = data[4];
+  if (version !== 1 && version !== 2) throw new Error("未対応のカード用健診データです。");
+  if (version === 2 && data.length < 21) throw new Error("カード用健診データが途中で切れています。");
   const groups = [];
-  for (let offset = 15; offset < data.length;) {
+  for (let offset = version >= 2 ? 21 : 15; offset < data.length;) {
     const id = data[offset++];
     const length = data[offset++];
     if (offset + length > data.length) throw new Error("カード用健診データが途中で切れています。");
@@ -90,12 +99,27 @@ export function inspectFelicaExamPayload(bytes) {
     offset += length;
   }
   return {
-    version: data[4],
+    version,
     patientHash: readU32(data, 5),
     updatedMinute: readU32(data, 9),
     confirmedBitmap: data[13] | (data[14] << 8),
+    eventHash: version >= 2 ? readU32(data, 15) : null,
+    scheduledDate: version >= 2 ? decodeScheduledDate(data[19] | (data[20] << 8)) : "",
     groups
   };
+}
+
+function encodeScheduledDate(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ""));
+  if (!match) return 0xffff;
+  const time = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  const days = Math.floor((time - Date.UTC(2000, 0, 1)) / 86400000);
+  return days >= 0 && days < 0xffff ? days : 0xffff;
+}
+
+function decodeScheduledDate(days) {
+  if (days === 0xffff) return "";
+  return new Date(Date.UTC(2000, 0, 1) + days * 86400000).toISOString().slice(0, 10);
 }
 
 function encodeStool(values) {

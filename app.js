@@ -1,5 +1,5 @@
 import { ageOnDate, evaluateGuidanceAge, formatJapaneseDate } from "./guidance.js?v=20260713-01";
-import { bytesToHex, decodeFelicaExamPayload, encodeFelicaExamPayload, extractFelicaExamPayload, patientHashFor } from "./felica-payload.mjs?v=20260928-02";
+import { bytesToHex, decodeFelicaExamPayload, encodeFelicaExamPayload, eventHashFor, extractFelicaExamPayload, patientHashFor } from "./felica-payload.mjs?v=20261117-01";
 
 const DB_NAME = "mobile-exam-entry";
 const DEFAULT_CLOUD_URL = "https://mobile-exam-entry-b6w9-z574.onrender.com/api/exam-records";
@@ -1237,6 +1237,17 @@ async function lookupFelicaBinding(card) {
     const payload = await readFelicaPayload(card);
     const decoded = decodeFelicaExamPayload(payload);
     const activeGroupId = String(activeGroup.id);
+    const cardEventMatches = decoded.eventHash === null || decoded.eventHash === eventHashFor(activeGroupId);
+    const cardDateMatches = !decoded.scheduledDate || !activeGroup.scheduledDate || decoded.scheduledDate === activeGroup.scheduledDate;
+    if (!cardEventMatches || !cardDateMatches) {
+      return {
+        ...result,
+        binding: null,
+        storedBinding,
+        decoded,
+        cardLookupError: `別の健診で使用したカードです${decoded.scheduledDate ? `（カード予定日: ${decoded.scheduledDate}）` : ""}。受付で今回の受診者へ再登録してください。`
+      };
+    }
     const bindingMatchesCard = storedBinding
       && String(storedBinding.groupId) === activeGroupId
       && patientHashFor(storedBinding.groupId, storedBinding.patientCode) === decoded.patientHash;
@@ -1571,6 +1582,7 @@ async function initializeReceptionCard(card) {
     const payload = encodeFelicaExamPayload({
       groupId: String(activeGroup.id),
       patientCode: receptionPatient.patientCode,
+      scheduledDate: activeGroup.scheduledDate || "",
       groupValues: []
     });
     const writeRequest = {
@@ -1869,7 +1881,12 @@ async function writeConfirmedExamSnapshotToFelica(groupKey) {
       throw new Error("このカードは表示中の受診者に登録されていません");
     }
     const groupValues = await getGroupValuesForRecord(record);
-    const payload = encodeFelicaExamPayload({ groupId, patientCode, groupValues });
+    const payload = encodeFelicaExamPayload({
+      groupId,
+      patientCode,
+      scheduledDate: activeGroup?.scheduledDate || "",
+      groupValues
+    });
     const result = await felicaRequest("/card/write", {
       idm: card.idm,
       payloadHex: bytesToHex(payload),
