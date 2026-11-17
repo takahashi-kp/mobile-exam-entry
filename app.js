@@ -1446,7 +1446,7 @@ async function lookupReceptionPatient() {
     birthDate: data["生年月日"] || ""
   };
   renderReceptionPatient();
-  const existing = await getOne(RECEPTIONS, receptionId(code));
+  const existing = await getTodayReception(code);
   setReceptionState(
     existing ? "warning" : "ready",
     existing ? "この受診者は受付済みです" : "受診者を確認してください",
@@ -1585,9 +1585,9 @@ async function receiveReceptionWithoutCard() {
 
 async function saveReception(method, cardIdm) {
   const now = new Date().toISOString();
-  const existing = await getOne(RECEPTIONS, receptionId(receptionPatient.patientCode));
+  const existing = await getTodayReception(receptionPatient.patientCode);
   await put(RECEPTIONS, {
-    id: receptionId(receptionPatient.patientCode),
+    id: existing?.id || receptionId(receptionPatient.patientCode),
     entityType: "reception",
     scheduleGroupId: activeGroup.id,
     scheduleGroupName: activeGroup.name || "",
@@ -1599,6 +1599,7 @@ async function saveReception(method, cardIdm) {
     method,
     cardIdm: cardIdm || "",
     receivedAt: now,
+    receivedDate: localIsoDate(new Date()),
     firstReceivedAt: existing?.firstReceivedAt || now,
     deviceId: await getSyncDeviceId(),
     updatedAt: now,
@@ -1608,14 +1609,33 @@ async function saveReception(method, cardIdm) {
 }
 
 function receptionId(patientCode) {
+  return `reception::${activeGroup?.id || "nogroup"}::${localIsoDate(new Date())}::${patientCode}`;
+}
+
+function legacyReceptionId(patientCode) {
   return `reception::${activeGroup?.id || "nogroup"}::${patientCode}`;
+}
+
+function receptionDate(item) {
+  if (item?.receivedDate) return String(item.receivedDate);
+  const receivedAt = new Date(item?.receivedAt || "");
+  return Number.isNaN(receivedAt.getTime()) ? "" : localIsoDate(receivedAt);
+}
+
+async function getTodayReception(patientCode) {
+  const current = await getOne(RECEPTIONS, receptionId(patientCode));
+  if (current) return current;
+  const legacy = await getOne(RECEPTIONS, legacyReceptionId(patientCode));
+  return receptionDate(legacy) === localIsoDate(new Date()) ? legacy : null;
 }
 
 async function refreshReceptionRows() {
   const rows = document.querySelector("#receptionRows");
   if (!rows) return;
+  const today = localIsoDate(new Date());
   const items = (await getAll(RECEPTIONS))
     .filter((item) => !activeGroup || item.scheduleGroupId === activeGroup.id)
+    .filter((item) => receptionDate(item) === today)
     .sort((a, b) => String(b.receivedAt).localeCompare(String(a.receivedAt)));
   document.querySelector("#receptionCount").textContent = `${items.length}人`;
   rows.innerHTML = items.length ? items.map((item) => `<tr>
@@ -1754,7 +1774,8 @@ async function recoverFromFelicaCard() {
       scheduleGroupName: activeGroup.name || "", patientCode, patientName: patientData["氏名"] || "",
       patientKana: patientData["カナ氏名"] || "", sex: patientData["性別名称"] || "",
       birthDate: patientData["生年月日"] || "", method: "felica", cardIdm, receivedAt: now,
-      firstReceivedAt: now, deviceId: await getSyncDeviceId(), updatedAt: now, syncState: "local"
+      receivedDate: localIsoDate(new Date()), firstReceivedAt: now,
+      deviceId: await getSyncDeviceId(), updatedAt: now, syncState: "local"
     });
     recoveredCardVersions.add(versionKey);
     recoveryResults.unshift({ time: now, patientCode, name: patientData["氏名"] || "", groups: decoded.groupValues.length, card: cardIdm.slice(-4), result: "復元済" });
