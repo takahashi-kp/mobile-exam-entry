@@ -1231,34 +1231,58 @@ async function readFelicaCard() {
 
 async function lookupFelicaBinding(card) {
   const result = await felicaRequest("/binding/lookup", { idm: card.idm });
-  if (result.binding || !activeGroup) return result;
+  const storedBinding = result.binding || null;
+  if (!activeGroup) return { ...result, storedBinding };
   try {
-    let payload;
-    if (card.cardData?.payloadHex) {
-      const payloadHex = String(card.cardData.payloadHex || "");
-      payload = Uint8Array.from(payloadHex.match(/.{2}/g) || [], (pair) => Number.parseInt(pair, 16));
-    } else {
-      const backup = await felicaRequest("/card/backup", {});
-      if (String(backup.idm || "").toUpperCase() !== String(card.idm || "").toUpperCase()) {
-        throw new Error("読取中に別のカードへ置き換わりました。");
-      }
-      payload = extractFelicaExamPayload(backup.blocks).payload;
-    }
+    const payload = await readFelicaPayload(card);
     const decoded = decodeFelicaExamPayload(payload);
-    const patients = (await getAll(SCHEDULE_PATIENTS)).filter((patient) => patient.groupId === activeGroup.id);
+    const activeGroupId = String(activeGroup.id);
+    const bindingMatchesCard = storedBinding
+      && String(storedBinding.groupId) === activeGroupId
+      && patientHashFor(storedBinding.groupId, storedBinding.patientCode) === decoded.patientHash;
+    if (bindingMatchesCard) return { ...result, storedBinding, decoded };
+
+    const patients = (await getAll(SCHEDULE_PATIENTS)).filter((patient) => String(patient.groupId) === activeGroupId);
     const matches = patients.filter((patient) => patientHashFor(activeGroup.id, patient["受診者コード"] || "") === decoded.patientHash);
-    if (!matches.length) return { ...result, cardLookupError: "カードに一致する受診者が、選択中の予定グループに見つかりません。" };
-    if (matches.length > 1) return { ...result, cardLookupError: "カードの照合値が複数の受診者と一致しました。" };
+    if (!matches.length) {
+      return {
+        ...result,
+        binding: null,
+        storedBinding,
+        decoded,
+        cardLookupError: "カード本体の受診者情報と端末内の登録が一致しません。受付でカードを再登録してください。"
+      };
+    }
+    if (matches.length > 1) {
+      return { ...result, binding: null, storedBinding, decoded, cardLookupError: "カードの照合値が複数の受診者と一致しました。" };
+    }
     const binding = {
       idm: card.idm,
       patientCode: String(matches[0]["受診者コード"] || ""),
-      groupId: String(activeGroup.id)
+      groupId: activeGroupId
     };
     await felicaRequest("/binding/save", { ...binding, overwrite: true });
-    return { ...result, binding, rebuiltFromCard: true };
+    return { ...result, binding, storedBinding, decoded, rebuiltFromCard: true };
   } catch (error) {
-    return { ...result, cardLookupError: error.message || "カード内の受付情報を確認できませんでした。" };
+    return {
+      ...result,
+      binding: null,
+      storedBinding,
+      cardLookupError: error.message || "カード内の受付情報を確認できませんでした。"
+    };
   }
+}
+
+async function readFelicaPayload(card) {
+  if (card.cardData?.payloadHex) {
+    const payloadHex = String(card.cardData.payloadHex || "");
+    return Uint8Array.from(payloadHex.match(/.{2}/g) || [], (pair) => Number.parseInt(pair, 16));
+  }
+  const backup = await felicaRequest("/card/backup", {});
+  if (String(backup.idm || "").toUpperCase() !== String(card.idm || "").toUpperCase()) {
+    throw new Error("読取中に別のカードへ置き換わりました。");
+  }
+  return extractFelicaExamPayload(backup.blocks).payload;
 }
 
 async function readFelicaCardAndOpenPatient() {
@@ -1534,7 +1558,7 @@ async function initializeReceptionCard(card) {
   felicaBusy = true;
   try {
     const bindingResult = await lookupFelicaBinding(card);
-    const previous = bindingResult.binding;
+    const previous = bindingResult.binding || bindingResult.storedBinding;
     if (previous && (String(previous.patientCode) !== receptionPatient.patientCode || String(previous.groupId) !== String(activeGroup.id))) {
       const confirmed = window.confirm(`このカードは個人番号 ${previous.patientCode} に登録されています。\n内容を消去して現在の受診者へ再登録しますか？`);
       if (!confirmed) {
@@ -1557,6 +1581,15 @@ async function initializeReceptionCard(card) {
     };
     await felicaRequest("/card/write", writeRequest);
     await felicaRequest("/card/write", writeRequest);
+    const verifiedCard = await readFelicaCard();
+    if (String(verifiedCard.idm || "").toUpperCase() !== String(card.idm || "").toUpperCase()) {
+      throw new Error("書込み確認中に別のカードへ置き換わりました。");
+    }
+    const verified = decodeFelicaExamPayload(await readFelicaPayload(verifiedCard));
+    const expectedPatientHash = patientHashFor(String(activeGroup.id), receptionPatient.patientCode);
+    if (verified.patientHash !== expectedPatientHash) {
+      throw new Error("書込み後のカードに別の受診者情報が記録されています。カードを使用停止にしてください。");
+    }
     await felicaRequest("/binding/save", {
       idm: card.idm,
       patientCode: receptionPatient.patientCode,
