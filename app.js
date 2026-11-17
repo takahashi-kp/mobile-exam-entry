@@ -2012,6 +2012,7 @@ async function switchView(view) {
     await loadQuestionnaireForCurrentPatient({ force: true });
   }
   document.body.dataset.view = view;
+  updateViewTitle(view);
   if (view === "entry") showEntryMenu();
   if (view === "mobile") await prepareMobileExamView();
   document.querySelectorAll("button[data-view]").forEach((button) => {
@@ -2039,6 +2040,23 @@ async function switchView(view) {
     updateGuidanceSelection();
   }
   return true;
+}
+
+function updateViewTitle(view) {
+  const titles = {
+    reception: "受付",
+    entry: "入力",
+    mobile: "入力",
+    records: "一覧",
+    questionnaire: "問診",
+    guidance: "保健指導",
+    schedules: "予定管理",
+    sync: "設定"
+  };
+  const title = titles[view] || "入力";
+  const heading = document.querySelector("#currentViewTitle");
+  if (heading) heading.textContent = title;
+  document.title = `出張健診 ${title}`;
 }
 
 function isSmartphoneDevice() {

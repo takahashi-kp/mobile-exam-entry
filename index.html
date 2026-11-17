@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#008c75">
-  <title>出張健診 検査項目入力</title>
+  <title>出張健診 入力</title>
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" href="./mobile-exam-icon-transparent.png?v=20261116-01" type="image/png">
   <link rel="apple-touch-icon" href="./mobile-exam-icon-transparent.png?v=20261116-01">
@@ -18,7 +18,7 @@
         <img class="app-brand-icon" src="./mobile-exam-icon-transparent.png?v=20261116-01" alt="">
         <div>
           <p class="eyebrow">出張健診</p>
-          <h1>検査項目入力</h1>
+          <h1 id="currentViewTitle">入力</h1>
         </div>
       </div>
       <div class="header-controls">
@@ -30,7 +30,7 @@
           <button data-view="guidance" type="button">保健指導</button>
           <button id="exportRosters" type="button">連名簿</button>
           <button data-view="schedules" type="button">予定管理</button>
-          <button data-view="sync" type="button">同期</button>
+          <button data-view="sync" type="button">設定</button>
         </div>
         <div class="actions">
           <button class="ghost" id="exportCsv" type="button">CSV</button>
@@ -756,16 +756,29 @@
 
       <section class="view" id="syncView">
         <div class="sync-panel">
-          <label>
-            <span>クラウド同期API URL</span>
-            <input id="cloudUrl" placeholder="https://mobile-exam-entry-b6w9.onrender.com/api/exam-records">
-          </label>
-          <label>
-            <span>APIキー</span>
-            <input id="cloudKey" type="password" placeholder="任意">
-          </label>
+          <fieldset class="settings-group sync-settings-group">
+            <legend>同期</legend>
+            <label>
+              <span>クラウド同期API URL</span>
+              <input id="cloudUrl" placeholder="https://mobile-exam-entry-b6w9.onrender.com/api/exam-records">
+            </label>
+            <label>
+              <span>APIキー</span>
+              <input id="cloudKey" type="password" placeholder="任意">
+            </label>
+            <div class="sync-actions">
+              <button class="primary" id="saveSettings" type="button">設定保存</button>
+              <button class="ghost" id="pullCloud" type="button">クラウド読込</button>
+            </div>
+            <p class="sync-copy" id="syncMessage">オンライン時はローカル保存後にクラウドへ送信します。オフライン時は未同期として保持します。</p>
+            <div class="cleanup-panel">
+              <h2>端末内データ削除</h2>
+              <p id="cleanupSummary">同期状態を確認中です。</p>
+              <button class="ghost" id="deleteSyncedLocal" type="button">同期済データを端末から削除</button>
+            </div>
+          </fieldset>
           <fieldset id="cardFeedbackSetting" class="feedback-settings" hidden>
-            <legend>カード・バーコード読取音（この端末）</legend>
+            <legend>確認音</legend>
             <label>
               <span>成功音</span>
               <select id="feedbackSuccessMode">
@@ -787,20 +800,10 @@
             </label>
             <button class="ghost feedback-test" id="testErrorFeedback" type="button">失敗音を試聴</button>
             <label class="feedback-vibration">
+              <span>振動</span>
               <input id="feedbackVibration" type="checkbox">
-              <span>振動を使用する</span>
             </label>
           </fieldset>
-          <div class="sync-actions">
-            <button class="primary" id="saveSettings" type="button">設定保存</button>
-            <button class="ghost" id="pullCloud" type="button">クラウド読込</button>
-          </div>
-          <p class="sync-copy" id="syncMessage">オンライン時はローカル保存後にクラウドへ送信します。オフライン時は未同期として保持します。</p>
-          <div class="cleanup-panel">
-            <h2>端末内データ削除</h2>
-            <p id="cleanupSummary">同期状態を確認中です。</p>
-            <button class="ghost" id="deleteSyncedLocal" type="button">同期済データを端末から削除</button>
-          </div>
           <div class="cleanup-panel">
             <h2>Android版</h2>
             <p>Android 9以降のスマートフォン・タブレットにインストールできます。</p>
@@ -811,6 +814,6 @@
     </section>
   </main>
 
-  <script src="./app.js?v=20261117-01" type="module"></script>
+  <script src="./app.js?v=20261117-02" type="module"></script>
 </body>
 </html>
